@@ -45,6 +45,32 @@ type FiscalYear struct {
 	EndsOn    pgtype.Date `json:"ends_on"`
 }
 
+type Invoice struct {
+	ID             uuid.UUID          `json:"id"`
+	CompanyID      uuid.UUID          `json:"company_id"`
+	CounterpartyID uuid.UUID          `json:"counterparty_id"`
+	Number         string             `json:"number"`
+	Status         string             `json:"status"`
+	InvoiceDate    pgtype.Date        `json:"invoice_date"`
+	DueDate        pgtype.Date        `json:"due_date"`
+	Currency       string             `json:"currency"`
+	Ocr            string             `json:"ocr"`
+	NoteEnc        string             `json:"note_enc"`
+	VerificationID pgtype.UUID        `json:"verification_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	FinalizedAt    pgtype.Timestamptz `json:"finalized_at"`
+}
+
+type InvoiceLine struct {
+	ID            int64     `json:"id"`
+	InvoiceID     uuid.UUID `json:"invoice_id"`
+	LineNo        int32     `json:"line_no"`
+	Description   string    `json:"description"`
+	QuantityMilli int64     `json:"quantity_milli"`
+	UnitPriceOre  int64     `json:"unit_price_ore"`
+	VatCode       string    `json:"vat_code"`
+}
+
 type Verification struct {
 	ID          uuid.UUID          `json:"id"`
 	CompanyID   uuid.UUID          `json:"company_id"`

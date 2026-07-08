@@ -81,6 +81,25 @@ func SalesAccount(rate Rate) string {
 	}
 }
 
+// SalesAccountForCode is the BAS revenue account for a VAT code, including the
+// non-domestic codes: RCEU (EU B2B services, 3308) and EXP (non-EU, 3305).
+func SalesAccountForCode(c Code) string {
+	switch c {
+	case SE25:
+		return "3001"
+	case SE12:
+		return "3002"
+	case SE06:
+		return "3003"
+	case RCEU:
+		return "3308"
+	case EXP:
+		return "3305"
+	default:
+		return ""
+	}
+}
+
 // Declaration holds the momsdeklaration boxes Pare computes for a period.
 type Declaration struct {
 	Box05 ledger.Amount // net domestic taxable sales
