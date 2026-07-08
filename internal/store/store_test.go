@@ -3,7 +3,6 @@ package store
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,23 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/brightinteraction/pare/internal/crypto"
-	"github.com/brightinteraction/pare/internal/db"
 	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/brightinteraction/pare/internal/testdb"
 )
 
 func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("PARE_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("PARE_TEST_DATABASE_URL not set; skipping DB integration test")
-	}
-	if err := db.Migrate(dsn); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	pool, err := pgxpool.New(context.Background(), dsn)
+	pool, err := pgxpool.New(context.Background(), testdb.New(t, "store"))
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
+	testdb.Reset(t, pool)
 	key, _ := crypto.NewDEK()
 	kek, err := crypto.NewKEK(key)
 	if err != nil {
