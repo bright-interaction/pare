@@ -71,6 +71,14 @@ type InvoiceLine struct {
 	VatCode       string    `json:"vat_code"`
 }
 
+type ShieldToken struct {
+	SessionID  string             `json:"session_id"`
+	Token      string             `json:"token"`
+	Kind       string             `json:"kind"`
+	Ciphertext string             `json:"ciphertext"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type Verification struct {
 	ID          uuid.UUID          `json:"id"`
 	CompanyID   uuid.UUID          `json:"company_id"`
