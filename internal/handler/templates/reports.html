@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="toolbar"><h1 style="margin:0">Rapporter</h1><a class="btn" href="/sie">Exportera SIE</a></div>
+<h2>Huvudbok (saldon)</h2>
+{{if .Data.Rows}}
+<table>
+  <tr><th>Konto</th><th class="num">Saldo</th></tr>
+  {{range .Data.Rows}}<tr><td>{{.Account}}</td><td class="num">{{.Net}}</td></tr>{{end}}
+</table>
+{{else}}<div class="empty">Inga verifikat än.</div>{{end}}
+{{end}}

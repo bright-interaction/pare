@@ -1,0 +1,18 @@
+{{define "content"}}
+<div class="toolbar"><h1 style="margin:0">Kunder</h1></div>
+<h2>Ny kund</h2>
+<form method="post" action="/counterparties">
+  <div class="row">
+    <div><label>Namn</label><input name="name" required></div>
+    <div><label>Org.nr</label><input name="orgnr"></div>
+    <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn" type="submit">Lägg till</button></div>
+  </div>
+</form>
+<h2>Alla kunder</h2>
+{{if .Data}}
+<table>
+  <tr><th>Namn</th><th>Org.nr</th></tr>
+  {{range .Data}}<tr><td>{{.Name}}</td><td>{{.OrgNr}}</td></tr>{{end}}
+</table>
+{{else}}<div class="empty">Inga kunder än.</div>{{end}}
+{{end}}

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) Bright Interaction
 
-// Package handler builds Pare's HTTP router: health, the MCP endpoint, and
-// (later) the operator API + embedded UI.
+// Package handler builds Pare's HTTP router: health, the MCP endpoint, and the
+// server-rendered operator UI (session-authed).
 package handler
 
 import (
@@ -13,12 +13,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 
+	"github.com/brightinteraction/pare/internal/auth"
 	"github.com/brightinteraction/pare/internal/mcp"
+	renderpkg "github.com/brightinteraction/pare/internal/render"
+	"github.com/brightinteraction/pare/internal/store"
 )
 
 // Server holds the wired dependencies for the router.
 type Server struct {
-	MCP *mcp.Server
+	MCP       *mcp.Server
+	Auth      *auth.Auth
+	Store     *store.Store
+	Gotenberg *renderpkg.Gotenberg
 }
 
 // Routes builds the chi router.
@@ -42,6 +48,30 @@ func (s *Server) Routes() http.Handler {
 			r.Use(httprate.LimitByIP(240, time.Minute))
 			r.Handle("/", s.MCP.Handler())
 			r.Handle("/*", s.MCP.Handler())
+		})
+	}
+
+	// Operator web UI (server-rendered, session cookie auth).
+	if s.Auth != nil && s.Store != nil {
+		r.Get("/", s.handleRoot)
+		r.Get("/setup", s.handleSetupForm)
+		r.Post("/setup", s.handleSetup)
+		r.Get("/login", s.handleLoginForm)
+		r.Post("/login", s.handleLogin)
+		r.Post("/logout", s.handleLogout)
+
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireSession)
+			r.Get("/dashboard", s.handleDashboard)
+			r.Get("/counterparties", s.handleCounterparties)
+			r.Post("/counterparties", s.handleAddCounterparty)
+			r.Get("/invoices", s.handleInvoices)
+			r.Get("/invoices/new", s.handleInvoiceNew)
+			r.Post("/invoices", s.handleInvoiceCreate)
+			r.Post("/invoices/{id}/finalize", s.handleInvoiceFinalize)
+			r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
+			r.Get("/reports", s.handleReports)
+			r.Get("/sie", s.handleSIE)
 		})
 	}
 

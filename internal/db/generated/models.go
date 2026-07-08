@@ -71,12 +71,26 @@ type InvoiceLine struct {
 	VatCode       string    `json:"vat_code"`
 }
 
+type Session struct {
+	Token     string             `json:"token"`
+	UserID    uuid.UUID          `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
 type ShieldToken struct {
 	SessionID  string             `json:"session_id"`
 	Token      string             `json:"token"`
 	Kind       string             `json:"kind"`
 	Ciphertext string             `json:"ciphertext"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type User struct {
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type Verification struct {

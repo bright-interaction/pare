@@ -1,0 +1,25 @@
+{{define "content"}}
+<h1>Ny faktura</h1>
+{{if .Data}}
+<form method="post" action="/invoices">
+  <label>Kund</label>
+  <select name="counterparty" required>{{range .Data}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+  <h2>Rader</h2>
+  <div class="linegrid"><div class="muted">Beskrivning</div><div class="muted">Antal</div><div class="muted">À-pris (kr)</div><div class="muted">Moms</div></div>
+  {{range seq 5}}
+  <div class="linegrid">
+    <input name="desc" placeholder="Beskrivning">
+    <input name="qty" type="number" step="0.001" placeholder="1">
+    <input name="price" type="number" step="0.01" placeholder="0">
+    <select name="vat">
+      <option value="SE25">25 %</option><option value="SE12">12 %</option><option value="SE06">6 %</option>
+      <option value="RCEU">Omvänd EU</option><option value="EXP">Export</option>
+    </select>
+  </div>
+  {{end}}
+  <div style="margin-top:16px"><button class="btn" type="submit">Skapa utkast</button> <a class="btn secondary" href="/invoices">Avbryt</a></div>
+</form>
+{{else}}
+<div class="empty">Lägg till en <a href="/counterparties">kund</a> först.</div>
+{{end}}
+{{end}}

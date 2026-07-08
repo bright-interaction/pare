@@ -1,0 +1,13 @@
+{{define "content"}}
+<div class="auth">
+  <h1>Välkommen till Pare</h1>
+  <p>Skapa ditt konto och ditt företag för att komma igång.</p>
+  <form method="post" action="/setup">
+    <label>E-post</label><input type="email" name="email" required>
+    <label>Lösenord</label><input type="password" name="password" required minlength="8">
+    <label>Företagsnamn</label><input name="company" required>
+    <label>Organisationsnummer</label><input name="orgnr" placeholder="556000-0000" required>
+    <div style="margin-top:18px"><button class="btn" type="submit">Skapa konto</button></div>
+  </form>
+</div>
+{{end}}
