@@ -1,0 +1,61 @@
+-- name: InsertCompany :one
+INSERT INTO companies (name, orgnr, dek_wrapped)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: GetCompany :one
+SELECT * FROM companies WHERE id = $1;
+
+-- name: ListCompanies :many
+SELECT * FROM companies ORDER BY created_at;
+
+-- name: UpsertAccount :exec
+INSERT INTO accounts (company_id, number, name, class, default_vat_code)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (company_id, number)
+DO UPDATE SET name = EXCLUDED.name, class = EXCLUDED.class, default_vat_code = EXCLUDED.default_vat_code;
+
+-- name: ListAccounts :many
+SELECT * FROM accounts WHERE company_id = $1 ORDER BY number;
+
+-- name: NextVerificationNumber :one
+SELECT COALESCE(MAX(number), 0) + 1 AS next FROM verifications
+WHERE company_id = $1 AND series = $2;
+
+-- name: InsertVerification :one
+INSERT INTO verifications (company_id, series, number, vdate, description, reversal_of, posted_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: InsertVerificationLine :exec
+INSERT INTO verification_lines (verification_id, account, debit_ore, credit_ore, vat_code)
+VALUES ($1, $2, $3, $4, $5);
+
+-- name: ListVerifications :many
+SELECT * FROM verifications WHERE company_id = $1 ORDER BY vdate, series, number;
+
+-- name: ListLinesForCompany :many
+SELECT l.verification_id, l.account, l.debit_ore, l.credit_ore, l.vat_code
+FROM verification_lines l
+JOIN verifications v ON v.id = l.verification_id
+WHERE v.company_id = $1;
+
+-- name: TrialBalance :many
+SELECT l.account, SUM(l.debit_ore - l.credit_ore)::BIGINT AS net_ore
+FROM verification_lines l
+JOIN verifications v ON v.id = l.verification_id
+WHERE v.company_id = $1
+GROUP BY l.account
+ORDER BY l.account;
+
+-- name: InsertCounterparty :one
+INSERT INTO counterparties
+    (company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: GetCounterparty :one
+SELECT * FROM counterparties WHERE id = $1;
+
+-- name: ListCounterparties :many
+SELECT * FROM counterparties WHERE company_id = $1 ORDER BY created_at;
