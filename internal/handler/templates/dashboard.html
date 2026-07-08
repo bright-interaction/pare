@@ -1,0 +1,21 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Översikt</h1>
+<div class="cards">
+  <div class="card"><div class="k">Resultat</div><div class="v">{{$d.ResultKr}}</div></div>
+  <div class="card"><div class="k">Moms att betala</div><div class="v">{{$d.MomsToPayKr}}</div></div>
+  <div class="card"><div class="k">Obetalda fakturor</div><div class="v">{{$d.UnpaidCount}}</div><div class="muted">{{$d.UnpaidTotalKr}} kr</div></div>
+</div>
+<h2>Momsdeklaration</h2>
+<table>
+  <tr><th>Ruta</th><th>Beskrivning</th><th class="num">Belopp</th></tr>
+  <tr><td>05</td><td>Momspliktig försäljning (netto)</td><td class="num">{{$d.Moms.Box05}}</td></tr>
+  <tr><td>10</td><td>Utgående moms 25 %</td><td class="num">{{$d.Moms.Box10}}</td></tr>
+  <tr><td>11</td><td>Utgående moms 12 %</td><td class="num">{{$d.Moms.Box11}}</td></tr>
+  <tr><td>12</td><td>Utgående moms 6 %</td><td class="num">{{$d.Moms.Box12}}</td></tr>
+  <tr><td>30</td><td>Utgående moms omvänd betalningsskyldighet</td><td class="num">{{$d.Moms.Box30}}</td></tr>
+  <tr><td>39</td><td>Försäljning tjänster till EU</td><td class="num">{{$d.Moms.Box39}}</td></tr>
+  <tr><td>48</td><td>Ingående moms att dra av</td><td class="num">{{$d.Moms.Box48}}</td></tr>
+  <tr><td>49</td><td>Moms att betala eller få tillbaka</td><td class="num">{{$d.Moms.Box49}}</td></tr>
+</table>
+{{end}}

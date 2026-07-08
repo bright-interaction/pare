@@ -13,11 +13,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/brightinteraction/pare/internal/auth"
 	"github.com/brightinteraction/pare/internal/config"
 	"github.com/brightinteraction/pare/internal/crypto"
 	"github.com/brightinteraction/pare/internal/db"
+	gen "github.com/brightinteraction/pare/internal/db/generated"
 	"github.com/brightinteraction/pare/internal/handler"
 	"github.com/brightinteraction/pare/internal/mcp"
+	"github.com/brightinteraction/pare/internal/render"
 	"github.com/brightinteraction/pare/internal/store"
 )
 
@@ -53,7 +56,11 @@ func main() {
 	}
 	st := store.New(pool, kek)
 
-	srv := &handler.Server{}
+	srv := &handler.Server{
+		Store:     st,
+		Auth:      auth.New(gen.New(pool), os.Getenv("PARE_INSECURE_COOKIES") != "1"),
+		Gotenberg: render.NewGotenberg(cfg.GotenbergURL),
+	}
 	if len(cfg.ShieldKey) == 32 && cfg.MCPKey != "" {
 		m, err := mcp.New(st, pool, cfg.ShieldKey, cfg.MCPKey)
 		if err != nil {

@@ -1,0 +1,22 @@
+{{define "content"}}
+<div class="toolbar"><h1 style="margin:0">Fakturor</h1><a class="btn" href="/invoices/new">Ny faktura</a></div>
+{{if .Data}}
+<table>
+  <tr><th>Nr</th><th>Kund</th><th>Förfaller</th><th class="num">Belopp</th><th>Status</th><th></th></tr>
+  {{range .Data}}<tr>
+    <td>{{if .Number}}{{.Number}}{{else}}<span class="muted">utkast</span>{{end}}</td>
+    <td>{{.CustomerName}}</td>
+    <td>{{.DueDate}}</td>
+    <td class="num">{{.Total}}</td>
+    <td><span class="pill {{.Status}}">{{.Status}}</span></td>
+    <td class="num">
+      {{if eq .Status "draft"}}
+        <form method="post" action="/invoices/{{.ID}}/finalize" style="display:inline"><button class="btn small" type="submit">Slutför</button></form>
+      {{else}}
+        <a class="btn small secondary" href="/invoices/{{.ID}}/pdf">PDF</a>
+      {{end}}
+    </td>
+  </tr>{{end}}
+</table>
+{{else}}<div class="empty">Inga fakturor än. <a href="/invoices/new">Skapa din första</a>.</div>{{end}}
+{{end}}

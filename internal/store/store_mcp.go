@@ -28,9 +28,10 @@ func (s *Store) DefaultCompany(ctx context.Context) (uuid.UUID, error) {
 	return cos[0].ID, nil
 }
 
-// InvoiceSummary is a finalized invoice with its customer resolved (plaintext;
-// the MCP boundary tokenizes it before it reaches the LLM).
+// InvoiceSummary is an invoice with its customer resolved (plaintext; the MCP
+// boundary tokenizes it before it reaches the LLM).
 type InvoiceSummary struct {
+	ID            uuid.UUID
 	Number        string
 	CustomerName  string
 	CustomerOrgNr string
@@ -55,6 +56,7 @@ func (s *Store) UnpaidInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 			return nil, err
 		}
 		out = append(out, InvoiceSummary{
+			ID:            in.ID,
 			Number:        v.Number,
 			CustomerName:  v.Customer.Name,
 			CustomerOrgNr: v.Customer.OrgNr,
