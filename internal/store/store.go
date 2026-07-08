@@ -79,18 +79,28 @@ func (s *Store) companyDEK(ctx context.Context, companyID uuid.UUID) (*crypto.DE
 // one transaction, assigning the next number in the series. reversalOf may be
 // uuid.Nil. The row is written already posted, so it is immutable afterward.
 func (s *Store) PostVerification(ctx context.Context, companyID uuid.UUID, series string, date time.Time, description string, lines []ledger.Line, reversalOf uuid.UUID) (uuid.UUID, error) {
-	v := ledger.Verification{Series: series, Date: date, Description: description, Lines: lines}
-	if err := v.Validate(); err != nil {
-		return uuid.Nil, err
-	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	defer tx.Rollback(ctx)
-	qtx := s.q.WithTx(tx)
+	id, err := s.postVerification(ctx, s.q.WithTx(tx), companyID, series, date, description, lines, reversalOf)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, err
+	}
+	return id, nil
+}
 
+// postVerification is the transactional core shared by PostVerification and
+// invoice finalization; qtx must already be bound to an open transaction.
+func (s *Store) postVerification(ctx context.Context, qtx *gen.Queries, companyID uuid.UUID, series string, date time.Time, description string, lines []ledger.Line, reversalOf uuid.UUID) (uuid.UUID, error) {
+	v := ledger.Verification{Series: series, Date: date, Description: description, Lines: lines}
+	if err := v.Validate(); err != nil {
+		return uuid.Nil, err
+	}
 	num, err := qtx.NextVerificationNumber(ctx, gen.NextVerificationNumberParams{CompanyID: companyID, Series: series})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("store: next number: %w", err)
@@ -117,9 +127,6 @@ func (s *Store) PostVerification(ctx context.Context, companyID uuid.UUID, serie
 		}); err != nil {
 			return uuid.Nil, fmt.Errorf("store: insert line: %w", err)
 		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return uuid.Nil, err
 	}
 	return ver.ID, nil
 }
@@ -242,6 +249,13 @@ func kontoklass(number string) int16 {
 }
 
 func pgDate(t time.Time) pgtype.Date {
+	return pgtype.Date{Time: t, Valid: true}
+}
+
+func pgDateOrNull(t time.Time) pgtype.Date {
+	if t.IsZero() {
+		return pgtype.Date{}
+	}
 	return pgtype.Date{Time: t, Valid: true}
 }
 
