@@ -43,6 +43,7 @@ type InvoiceSummary struct {
 	Status        string
 	Overdue       bool // finalized + past due date
 	IsCredit      bool // this row is a kreditfaktura (negative document)
+	Matched       bool // transient: matches a reconciliation amount (not persisted)
 }
 
 // PartlyPaid reports whether the invoice has been partially (not fully) settled.
@@ -79,6 +80,31 @@ func (s *Store) UnpaidInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 		})
 	}
 	return out, nil
+}
+
+// MatchOpenInvoices returns open (finalized, non-credit) customer invoices whose
+// outstanding balance matches an incoming payment amount (SEK öre), best matches
+// first (exact, then within the öre tolerance). This is the smart reconciliation
+// helper: a bank payment lands, find the invoice it settles.
+func (s *Store) MatchOpenInvoices(ctx context.Context, companyID uuid.UUID, amount ledger.Amount) ([]InvoiceSummary, error) {
+	all, err := s.ListInvoiceSummaries(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	var exact, near []InvoiceSummary
+	for _, inv := range all {
+		if inv.Status != "finalized" || inv.IsCredit {
+			continue
+		}
+		diff := (inv.TotalSEK - inv.AmountPaid) - amount
+		switch {
+		case diff == 0:
+			exact = append(exact, inv)
+		case absAmount(diff) < oresRoundingThreshold:
+			near = append(near, inv)
+		}
+	}
+	return append(exact, near...), nil
 }
 
 // BalancesMap returns per-account net balances (debit-positive öre) as a map,

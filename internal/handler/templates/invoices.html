@@ -1,14 +1,20 @@
 {{define "content"}}
+{{$d := .Data}}
 <div class="toolbar"><h1 style="margin:0">Fakturor</h1><a class="btn" href="/invoices/new">Ny faktura</a></div>
-{{if .Data}}
+<form method="get" action="/invoices" class="row" style="max-width:420px;margin-bottom:16px">
+  <div><label>Matcha inbetalning (kr)</label><input name="match" type="number" step="0.01" value="{{$d.MatchInput}}" placeholder="belopp som landat på banken"></div>
+  <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn secondary" type="submit">Hitta faktura</button></div>
+</form>
+{{if $d.MatchInput}}<div class="alert {{if $d.MatchCount}}ok{{else}}error{{end}}">{{if $d.MatchCount}}{{$d.MatchCount}} faktura(or) matchar {{$d.MatchInput}} kr (markerade nedan). Klicka Betala för att registrera.{{else}}Ingen öppen faktura matchar {{$d.MatchInput}} kr exakt.{{end}}</div>{{end}}
+{{if $d.Invoices}}
 <table>
   <tr><th>Nr</th><th>Kund</th><th>Förfaller</th><th class="num">Belopp</th><th>Status</th><th></th></tr>
-  {{range .Data}}<tr>
+  {{range $d.Invoices}}<tr{{if .Matched}} style="background:var(--accent-weak)"{{end}}>
     <td>{{if .Number}}{{.Number}}{{else}}<span class="muted">utkast</span>{{end}}</td>
     <td>{{.CustomerName}}</td>
     <td>{{.DueDate}}</td>
     <td class="num">{{.Total}} {{.Currency}}</td>
-    <td><span class="pill {{.Status}}">{{.Status}}</span>{{if .PartlyPaid}} <span class="pill paid">delbetald</span>{{end}}{{if .Overdue}} <span class="pill draft">förfallen</span>{{end}}</td>
+    <td><span class="pill {{.Status}}">{{.Status}}</span>{{if .PartlyPaid}} <span class="pill paid">delbetald</span>{{end}}{{if .Overdue}} <span class="pill draft">förfallen</span>{{end}}{{if .Matched}} <span class="pill finalized">matchar</span>{{end}}</td>
     <td class="num">
       {{if eq .Status "draft"}}
         <form method="post" action="/invoices/{{.ID}}/finalize" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small" type="submit">Slutför</button></form>

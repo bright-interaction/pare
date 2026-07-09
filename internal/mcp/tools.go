@@ -87,6 +87,19 @@ func (s *Server) register() {
 		run:   runPostVerification,
 	})
 	s.add(tool{
+		name: "pare_match_payment",
+		desc: "Given an incoming payment amount (received_sek_ore), return the open customer invoices whose outstanding balance matches it, best first. Use to reconcile a bank payment to the right invoice before calling pare_record_payment. Customer identities are tokenized.",
+		schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"received_sek_ore": map[string]any{"type": "integer", "description": "the amount received, in öre (SEK)"},
+			},
+			"required": []string{"received_sek_ore"},
+		},
+		proto: &matchResult{},
+		run:   runMatchPayment,
+	})
+	s.add(tool{
 		name:  "pare_record_payment",
 		desc:  "Settle a finalized invoice: book the received amount to a bank account, clear Kundfordringar (1510), and post any currency difference (3960/7960). Reference the invoice by its number.",
 		write: true,
@@ -179,6 +192,18 @@ type unpaidRow struct {
 	Currency string `json:"currency"`
 	TotalSEK string `json:"total_sek"`
 	DueDate  string `json:"due_date"`
+}
+
+type matchResult struct {
+	Matches []matchRow `json:"matches"`
+}
+
+type matchRow struct {
+	Number     string `json:"number"`
+	Customer   string `json:"customer" shield:"tokenize,kind=name"`
+	OutstandKr string `json:"outstanding_kr"`
+	DueDate    string `json:"due_date"`
+	ExactMatch bool   `json:"exact_match"`
 }
 
 type trialBalanceResult struct {
@@ -289,6 +314,28 @@ func runUnpaid(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) 
 			Currency: u.Currency,
 			TotalSEK: u.TotalSEK.String(),
 			DueDate:  u.DueDate,
+		})
+	}
+	return res, nil
+}
+
+func runMatchPayment(ctx context.Context, tc toolCtx, args json.RawMessage) (any, error) {
+	var in struct {
+		ReceivedSEKOre int64 `json:"received_sek_ore"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, errInvalidArgs
+	}
+	matches, err := tc.store.MatchOpenInvoices(ctx, tc.company, ledger.Amount(in.ReceivedSEKOre))
+	if err != nil {
+		return nil, err
+	}
+	res := &matchResult{}
+	for _, m := range matches {
+		out := m.TotalSEK - m.AmountPaid
+		res.Matches = append(res.Matches, matchRow{
+			Number: m.Number, Customer: m.CustomerName, OutstandKr: out.String(),
+			DueDate: m.DueDate, ExactMatch: out == ledger.Amount(in.ReceivedSEKOre),
 		})
 	}
 	return res, nil

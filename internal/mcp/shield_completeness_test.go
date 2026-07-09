@@ -24,7 +24,8 @@ var safeFields = map[string]bool{
 	"box_22_non_eu_services_bought_kr": true, "box_30_reverse_charge_output_kr": true,
 	"box_39_eu_services_sold_kr": true, "box_48_input_kr": true, "box_49_to_pay_kr": true,
 	"at": true, "actor": true, "action": true, "target": true,
-	"total": true, "currency": true, "total_sek": true,
+	"total": true, "currency": true, "total_sek": true, "outstanding_kr": true,
+	"exact_match": true,
 	// invoice_number is a sequential business key (e.g. 2026-0001), not an
 	// identity; safe to echo so the AI can confirm which invoice it settled.
 	"invoice_number": true,
