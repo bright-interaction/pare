@@ -65,6 +65,9 @@ func TestFormTemplatesRender(t *testing.T) {
 
 	renderOK(t, "sie_import", pageData{Title: "Importera SIE", Email: "op@x.se", CSRF: "tok"}, "Importera SIE", `name="csrf" value="tok"`)
 
+	renderOK(t, "hjalp", pageData{Title: "Hjälp", Email: "op@x.se"}, "Kom igång", "Fakturera en kund", "MCP")
+	renderOK(t, "api", pageData{Title: "API", Email: "op@x.se", Data: apiData{Enabled: false}}, "API och integrationer", "Integrationer", "SIE")
+
 	renderOK(t, "dashboard", pageData{Title: "Översikt", Email: "op@x.se", Data: dashboardData{
 		Year: 2026, RevenueKr: "100 000,00", CostsKr: "40 000,00", ResultKr: "60 000,00",
 		CashKr: "50 000,00", ReceivablesKr: "12 500,00", PayablesKr: "3 000,00",

@@ -1,0 +1,30 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>API och integrationer</h1>
+
+<h2>MCP (AI-assistent)</h2>
+<p class="muted" style="max-width:680px">Pares API är ett MCP-gränssnitt (JSON-RPC 2.0 över POST /mcp) med organisationsnyckel-autentisering. En AI-assistent som Claude kan läsa och bokföra åt dig. Kundernas namn, org.nr, personnummer och bankuppgifter tokeniseras vid gränssnittet (Shield) så att de aldrig lämnar programmet i klartext. Skrivningar har ett takbelopp och stöder dry_run (förhandsgranskning utan bokföring).</p>
+{{if $d.Enabled}}
+<table>
+  <tr><th>Verktyg</th><th>Typ</th><th>Beskrivning</th></tr>
+  {{range $d.Tools}}<tr>
+    <td>{{.Name}}</td>
+    <td>{{if .Write}}<span class="pill finalized">skriver</span>{{else}}<span class="pill draft">läser</span>{{end}}</td>
+    <td class="muted">{{.Desc}}</td>
+  </tr>{{end}}
+</table>
+<p class="muted" style="margin-top:10px">Anslut i Claude Code med en MCP-server som pekar på <code>https://pare.brightinteraction.com/mcp</code> och sätter organisationsnyckeln (PARE_MCP_KEY) i Authorization-huvudet.</p>
+{{else}}
+<div class="alert error">MCP är inte aktiverat (kräver PARE_SHIELD_KEY och PARE_MCP_KEY).</div>
+{{end}}
+
+<h2>Integrationer</h2>
+<table>
+  <tr><th>Integration</th><th>Vad</th></tr>
+  <tr><td>SIE 4 (Fortnox/Visma/revisor)</td><td>Importera hela böcker eller ingående balans, exportera en giltig SIE-fil för revisorn. Under Rapporter.</td></tr>
+  <tr><td>PDF (Gotenberg)</td><td>Fakturor renderas till PDF för utskrift och e-post.</td></tr>
+  <tr><td>E-post (SMTP)</td><td>Skicka fakturor och betalningspåminnelser (kräver PARE_SMTP_*).</td></tr>
+  <tr><td>Felrapportering (Flare)</td><td>Fel och krascher rapporteras till husets Flare-instans (kräver FLARE_DSN).</td></tr>
+  <tr><td>MCP (Claude)</td><td>AI-assistenten sköter bokföringen via API:t ovan.</td></tr>
+</table>
+{{end}}
