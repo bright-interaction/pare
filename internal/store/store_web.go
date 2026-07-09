@@ -77,6 +77,8 @@ func (s *Store) ListInvoiceSummaries(ctx context.Context, companyID uuid.UUID) (
 			CustomerName:  v.Customer.Name,
 			CustomerOrgNr: v.Customer.OrgNr,
 			Total:         v.Total,
+			Currency:      v.Currency,
+			TotalSEK:      v.TotalSEK,
 			DueDate:       fmtDate(v.DueDate),
 			Status:        in.Status,
 		})

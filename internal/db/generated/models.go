@@ -72,6 +72,7 @@ type Invoice struct {
 	VerificationID pgtype.UUID        `json:"verification_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	FinalizedAt    pgtype.Timestamptz `json:"finalized_at"`
+	RatePpm        int64              `json:"rate_ppm"`
 }
 
 type InvoiceLine struct {

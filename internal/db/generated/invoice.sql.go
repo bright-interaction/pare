@@ -41,7 +41,7 @@ func (q *Queries) FinalizeInvoice(ctx context.Context, arg FinalizeInvoiceParams
 }
 
 const getInvoice = `-- name: GetInvoice :one
-SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at FROM invoices WHERE id = $1
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm FROM invoices WHERE id = $1
 `
 
 func (q *Queries) GetInvoice(ctx context.Context, id uuid.UUID) (Invoice, error) {
@@ -61,14 +61,15 @@ func (q *Queries) GetInvoice(ctx context.Context, id uuid.UUID) (Invoice, error)
 		&i.VerificationID,
 		&i.CreatedAt,
 		&i.FinalizedAt,
+		&i.RatePpm,
 	)
 	return i, err
 }
 
 const insertInvoice = `-- name: InsertInvoice :one
-INSERT INTO invoices (company_id, counterparty_id, invoice_date, due_date, currency, ocr, note_enc)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at
+INSERT INTO invoices (company_id, counterparty_id, invoice_date, due_date, currency, rate_ppm, ocr, note_enc)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm
 `
 
 type InsertInvoiceParams struct {
@@ -77,6 +78,7 @@ type InsertInvoiceParams struct {
 	InvoiceDate    pgtype.Date `json:"invoice_date"`
 	DueDate        pgtype.Date `json:"due_date"`
 	Currency       string      `json:"currency"`
+	RatePpm        int64       `json:"rate_ppm"`
 	Ocr            string      `json:"ocr"`
 	NoteEnc        string      `json:"note_enc"`
 }
@@ -88,6 +90,7 @@ func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) (I
 		arg.InvoiceDate,
 		arg.DueDate,
 		arg.Currency,
+		arg.RatePpm,
 		arg.Ocr,
 		arg.NoteEnc,
 	)
@@ -106,6 +109,7 @@ func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) (I
 		&i.VerificationID,
 		&i.CreatedAt,
 		&i.FinalizedAt,
+		&i.RatePpm,
 	)
 	return i, err
 }
@@ -169,7 +173,7 @@ func (q *Queries) ListInvoiceLines(ctx context.Context, invoiceID uuid.UUID) ([]
 }
 
 const listInvoices = `-- name: ListInvoices :many
-SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at FROM invoices WHERE company_id = $1 ORDER BY created_at
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm FROM invoices WHERE company_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invoice, error) {
@@ -195,6 +199,7 @@ func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 			&i.VerificationID,
 			&i.CreatedAt,
 			&i.FinalizedAt,
+			&i.RatePpm,
 		); err != nil {
 			return nil, err
 		}

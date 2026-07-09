@@ -41,12 +41,21 @@ func (s *Store) CreateInvoice(ctx context.Context, companyID, counterpartyID uui
 	defer tx.Rollback(ctx)
 	qtx := s.q.WithTx(tx)
 
+	currency := inv.Currency
+	if currency == "" {
+		currency = "SEK"
+	}
+	ratePPM := inv.RatePPM
+	if ratePPM == 0 {
+		ratePPM = 1_000_000
+	}
 	row, err := qtx.InsertInvoice(ctx, gen.InsertInvoiceParams{
 		CompanyID:      companyID,
 		CounterpartyID: counterpartyID,
 		InvoiceDate:    pgDateOrNull(inv.Date),
 		DueDate:        pgDateOrNull(inv.DueDate),
-		Currency:       "SEK",
+		Currency:       currency,
+		RatePpm:        ratePPM,
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("store: insert invoice: %w", err)
@@ -90,7 +99,7 @@ func (s *Store) FinalizeInvoice(ctx context.Context, companyID, invoiceID uuid.U
 	if err != nil {
 		return uuid.Nil, err
 	}
-	inv := invoice.Invoice{Number: number, Date: date, DueDate: due}
+	inv := invoice.Invoice{Number: number, Date: date, DueDate: due, Currency: dbInv.Currency, RatePPM: dbInv.RatePpm}
 	for _, r := range lineRows {
 		inv.Lines = append(inv.Lines, invoice.Line{
 			Description:   r.Description,
@@ -121,7 +130,7 @@ func (s *Store) FinalizeInvoice(ctx context.Context, companyID, invoiceID uuid.U
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("store: finalize invoice: %w", err)
 	}
-	if err := s.logAudit(ctx, qtx, companyID, "finalize_invoice", "invoice", invoiceID.String(), number+" "+inv.Total().String()); err != nil {
+	if err := s.logAudit(ctx, qtx, companyID, "finalize_invoice", "invoice", invoiceID.String(), number+" "+inv.GrossSEK().String()+" SEK"); err != nil {
 		return uuid.Nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -194,6 +203,8 @@ type InvoiceView struct {
 	Net          ledger.Amount
 	VAT          ledger.Amount
 	Total        ledger.Amount
+	Currency     string
+	TotalSEK     ledger.Amount // gross booked to Kundfordringar in SEK
 	OCR          string
 }
 
@@ -237,14 +248,17 @@ func (s *Store) InvoiceForRender(ctx context.Context, companyID, invoiceID uuid.
 		CompanyName:  co.Name,
 		CompanyOrgNr: co.Orgnr,
 		Customer:     cust,
+		Currency:     dbInv.Currency,
 		OCR:          dbInv.Ocr,
 	}
+	inv := invoice.Invoice{Currency: dbInv.Currency, RatePPM: dbInv.RatePpm}
 	for _, r := range lineRows {
 		l := invoice.Line{
 			QuantityMilli: r.QuantityMilli,
 			UnitPriceOre:  ledger.Amount(r.UnitPriceOre),
 			VATCode:       moms.Code(r.VatCode),
 		}
+		inv.Lines = append(inv.Lines, l)
 		net, vat := l.Net(), l.VAT()
 		view.Lines = append(view.Lines, InvoiceViewLine{
 			Description:   r.Description,
@@ -258,6 +272,7 @@ func (s *Store) InvoiceForRender(ctx context.Context, companyID, invoiceID uuid.
 		view.VAT += vat
 	}
 	view.Total = view.Net + view.VAT
+	view.TotalSEK = inv.GrossSEK()
 	return view, nil
 }
 
@@ -277,7 +292,7 @@ func (s *Store) RenderInvoicePDF(ctx context.Context, g *render.Gotenberg, compa
 		CustomerOrgNr:   v.Customer.OrgNr,
 		CustomerAddress: v.Customer.Address,
 		OCR:             v.OCR,
-		Currency:        "SEK",
+		Currency:        v.Currency,
 		NetKr:           v.Net.String(),
 		VATKr:           v.VAT.String(),
 		TotalKr:         v.Total.String(),

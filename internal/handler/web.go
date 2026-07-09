@@ -175,7 +175,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	unpaid, _ := s.Store.UnpaidInvoices(ctx, co)
 	var ut ledger.Amount
 	for _, u := range unpaid {
-		ut += u.Total
+		ut += u.TotalSEK
 	}
 	pd := s.base(r, "Översikt")
 	pd.Data = struct {
@@ -254,6 +254,14 @@ func (s *Server) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/invoices/new", http.StatusSeeOther)
 		return
 	}
+	currency := strings.ToUpper(strings.TrimSpace(r.PostFormValue("currency")))
+	if currency == "" {
+		currency = "SEK"
+	}
+	ratePPM := int64(1_000_000)
+	if currency != "SEK" {
+		ratePPM = parseRatePPM(r.PostFormValue("rate"))
+	}
 	descs := r.PostForm["desc"]
 	qtys := r.PostForm["qty"]
 	prices := r.PostForm["price"]
@@ -275,7 +283,7 @@ func (s *Server) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/invoices/new", http.StatusSeeOther)
 		return
 	}
-	if _, err := s.Store.CreateInvoice(r.Context(), companyID(r), cpID, invoice.Invoice{Lines: lines}); err != nil {
+	if _, err := s.Store.CreateInvoice(r.Context(), companyID(r), cpID, invoice.Invoice{Currency: currency, RatePPM: ratePPM, Lines: lines}); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -568,4 +576,12 @@ func parseKrOre(s string) ledger.Amount {
 		return 0
 	}
 	return ledger.Amount(math.Round(f * 100))
+}
+
+func parseRatePPM(s string) int64 {
+	f, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", "."), 64)
+	if err != nil || f <= 0 {
+		return 1_000_000
+	}
+	return int64(math.Round(f * 1_000_000))
 }

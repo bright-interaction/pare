@@ -4,6 +4,12 @@
 <form method="post" action="/invoices">
   <label>Kund</label>
   <select name="counterparty" required>{{range .Data}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+  <div class="row" style="margin-top:12px">
+    <div><label>Valuta</label>
+      <select name="currency"><option>SEK</option><option>EUR</option><option>USD</option><option>GBP</option><option>NOK</option><option>DKK</option></select>
+    </div>
+    <div><label>Växelkurs (SEK per enhet, 1 för SEK)</label><input name="rate" type="number" step="0.0001" value="1"></div>
+  </div>
   <h2>Rader</h2>
   <div class="linegrid"><div class="muted">Beskrivning</div><div class="muted">Antal</div><div class="muted">À-pris (kr)</div><div class="muted">Moms</div></div>
   {{range seq 5}}

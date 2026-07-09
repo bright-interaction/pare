@@ -1,6 +1,6 @@
 -- name: InsertInvoice :one
-INSERT INTO invoices (company_id, counterparty_id, invoice_date, due_date, currency, ocr, note_enc)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO invoices (company_id, counterparty_id, invoice_date, due_date, currency, rate_ppm, ocr, note_enc)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: InsertInvoiceLine :exec
