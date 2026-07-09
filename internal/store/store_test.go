@@ -129,11 +129,8 @@ func TestCounterpartyEncryption(t *testing.T) {
 		t.Fatalf("round trip mismatch: %+v", got)
 	}
 
-	other, err := s.BootstrapCompany(ctx, "Other AB", "556000-0002")
-	if err != nil {
-		t.Fatalf("bootstrap other: %v", err)
-	}
-	if _, err := s.GetCounterparty(ctx, other, id); err != ErrForeignCompany {
+	// A different company id (synthetic) must not resolve this counterparty.
+	if _, err := s.GetCounterparty(ctx, uuid.New(), id); err != ErrForeignCompany {
 		t.Fatalf("want ErrForeignCompany, got %v", err)
 	}
 }

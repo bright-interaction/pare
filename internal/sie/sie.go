@@ -240,6 +240,14 @@ func tokenize(line string) []string {
 }
 
 func quote(s string) string {
+	// SIE has no multi-line string; strip control chars (esp. CR/LF) so a
+	// user-controlled field cannot inject new #VER/#TRANS records into the file.
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
 

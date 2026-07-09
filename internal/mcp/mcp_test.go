@@ -138,6 +138,24 @@ func TestOverviewNoIdentities(t *testing.T) {
 	}
 }
 
+func TestExportSIENotRawOverMCP(t *testing.T) {
+	h, done := setup(t)
+	defer done()
+	rec := call(t, h, testKey, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"pare_export_sie","arguments":{}}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code %d", rec.Code)
+	}
+	body := rec.Body.Bytes()
+	// The raw SIE (which embeds org-nr + free-text descriptions) must NOT cross
+	// the LLM boundary; only shape + a UI-download pointer.
+	if bytes.Contains(body, []byte("sie_base64")) {
+		t.Errorf("raw SIE base64 still exposed over MCP: %s", body)
+	}
+	if !bytes.Contains(body, []byte("voucher_count")) || !bytes.Contains(body, []byte("Rapporter")) {
+		t.Errorf("export tool should return only metadata + a UI-download note: %s", body)
+	}
+}
+
 // toolText extracts the text content from a tools/call JSON-RPC response.
 func toolText(t *testing.T, body []byte) string {
 	t.Helper()

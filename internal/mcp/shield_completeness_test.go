@@ -16,13 +16,13 @@ var safeFields = map[string]bool{
 	"number": true, "total_kr": true, "net_kr": true, "vat_kr": true,
 	"due_date": true, "date": true, "status": true, "account": true,
 	"account_name": true, "description": true, "series": true, "filename": true,
-	"sie_base64": true, "verification_id": true, "result_kr": true,
+	"note": true, "verification_id": true, "result_kr": true,
 	"output_vat_kr": true, "input_vat_kr": true, "moms_to_pay_kr": true,
 	"unpaid_total_kr": true, "total_net_kr": true,
 	"box_05_net_sales_kr": true, "box_10_output_25_kr": true, "box_11_output_12_kr": true,
 	"box_12_output_6_kr": true, "box_30_reverse_charge_output_kr": true,
 	"box_39_eu_services_kr": true, "box_48_input_kr": true, "box_49_to_pay_kr": true,
-	"at": true, "actor": true, "action": true, "target": true, "detail": true,
+	"at": true, "actor": true, "action": true, "target": true,
 	"total": true, "currency": true, "total_sek": true,
 }
 

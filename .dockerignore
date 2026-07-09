@@ -1,0 +1,6 @@
+# Never let secrets or VCS metadata enter the build context / intermediate layers.
+.env
+.env.*
+*.env
+.git
+.gitignore
