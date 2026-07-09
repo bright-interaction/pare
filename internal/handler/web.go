@@ -57,7 +57,7 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 }
 
 func (s *Server) base(r *http.Request, title string) pageData {
-	d := pageData{Title: title}
+	d := pageData{Title: title, CSRF: csrfToken(r)}
 	if info, ok := r.Context().Value(ctxSession).(auth.SessionInfo); ok {
 		d.Email = info.Email
 		if co, ok := r.Context().Value(ctxCompany).(uuid.UUID); ok {
@@ -100,7 +100,7 @@ func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	render(w, "setup", pageData{Title: "Kom igång"}, http.StatusOK)
+	render(w, "setup", pageData{Title: "Kom igång", CSRF: csrfToken(r)}, http.StatusOK)
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
@@ -114,18 +114,18 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	company := strings.TrimSpace(r.PostFormValue("company"))
 	orgnr := strings.TrimSpace(r.PostFormValue("orgnr"))
 	if email == "" || len(pw) < 8 || company == "" {
-		render(w, "setup", pageData{Title: "Kom igång", Error: "Fyll i alla fält (lösenord minst 8 tecken)."}, http.StatusBadRequest)
+		render(w, "setup", pageData{Title: "Kom igång", CSRF: csrfToken(r), Error: "Fyll i alla fält (lösenord minst 8 tecken)."}, http.StatusBadRequest)
 		return
 	}
 	// Company first: a DB singleton (migration 00008) makes a concurrent second
 	// BootstrapCompany fail here, before any user is created, closing the
 	// first-user-wins race without an orphan user.
 	if _, err := s.Store.BootstrapCompany(r.Context(), company, orgnr); err != nil {
-		render(w, "setup", pageData{Title: "Kom igång", Error: "Kunde inte skapa företaget (det kan redan finnas ett)."}, http.StatusBadRequest)
+		render(w, "setup", pageData{Title: "Kom igång", CSRF: csrfToken(r), Error: "Kunde inte skapa företaget (det kan redan finnas ett)."}, http.StatusBadRequest)
 		return
 	}
 	if err := s.Auth.CreateUser(r.Context(), email, pw); err != nil {
-		render(w, "setup", pageData{Title: "Kom igång", Error: "Kunde inte skapa konto."}, http.StatusBadRequest)
+		render(w, "setup", pageData{Title: "Kom igång", CSRF: csrfToken(r), Error: "Kunde inte skapa konto."}, http.StatusBadRequest)
 		return
 	}
 	if token, err := s.Auth.Login(r.Context(), email, pw); err == nil {
@@ -135,14 +135,14 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
-	render(w, "login", pageData{Title: "Logga in"}, http.StatusOK)
+	render(w, "login", pageData{Title: "Logga in", CSRF: csrfToken(r)}, http.StatusOK)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	token, err := s.Auth.Login(r.Context(), strings.TrimSpace(r.PostFormValue("email")), r.PostFormValue("password"))
 	if err != nil {
-		render(w, "login", pageData{Title: "Logga in", Error: "Fel e-post eller lösenord."}, http.StatusUnauthorized)
+		render(w, "login", pageData{Title: "Logga in", CSRF: csrfToken(r), Error: "Fel e-post eller lösenord."}, http.StatusUnauthorized)
 		return
 	}
 	s.Auth.SetCookie(w, token)
@@ -208,8 +208,82 @@ func (s *Server) handleCounterparties(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pd := s.base(r, "Kunder")
+	switch r.URL.Query().Get("msg") {
+	case "retention":
+		pd.Error = "Kunden kan inte raderas: den har bokförda fakturor som måste sparas i sju år (bokföringslagen). Radering blockeras tills lagringstiden löpt ut."
+	case "erased":
+		pd.Flash = "Identitetsuppgifterna raderades."
+	case "saved":
+		pd.Flash = "Kunden sparades."
+	}
 	pd.Data = cps
 	render(w, "counterparties", pd, http.StatusOK)
+}
+
+func (s *Server) handleCounterpartyEdit(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	cp, err := s.Store.GetCounterparty(r.Context(), companyID(r), id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if cp.Erased {
+		http.Redirect(w, r, "/counterparties", http.StatusSeeOther)
+		return
+	}
+	pd := s.base(r, "Redigera kund")
+	pd.Data = cp
+	render(w, "counterparty_edit", pd, http.StatusOK)
+}
+
+func (s *Server) handleCounterpartyUpdate(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = r.ParseForm()
+	kind := r.PostFormValue("kind")
+	if kind != "supplier" {
+		kind = "customer"
+	}
+	cp := store.Counterparty{
+		Kind:         kind,
+		Name:         strings.TrimSpace(r.PostFormValue("name")),
+		OrgNr:        strings.TrimSpace(r.PostFormValue("orgnr")),
+		Personnummer: strings.TrimSpace(r.PostFormValue("personnummer")),
+		Address:      strings.TrimSpace(r.PostFormValue("address")),
+		IBAN:         strings.TrimSpace(r.PostFormValue("iban")),
+	}
+	if cp.Name == "" {
+		http.Redirect(w, r, "/counterparties/"+id.String()+"/edit", http.StatusSeeOther)
+		return
+	}
+	if err := s.Store.UpdateCounterparty(r.Context(), companyID(r), id, cp); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/counterparties?msg=saved", http.StatusSeeOther)
+}
+
+func (s *Server) handleCounterpartyErase(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	switch err := s.Store.EraseCounterparty(r.Context(), companyID(r), id); {
+	case err == nil:
+		http.Redirect(w, r, "/counterparties?msg=erased", http.StatusSeeOther)
+	case errors.Is(err, store.ErrRetentionBlocked):
+		http.Redirect(w, r, "/counterparties?msg=retention", http.StatusSeeOther)
+	default:
+		s.fail(w, err)
+	}
 }
 
 func (s *Server) handleAddCounterparty(w http.ResponseWriter, r *http.Request) {
@@ -328,14 +402,110 @@ func (s *Server) handleInvoicePDF(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(pdf)
 }
 
-func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
-	tb, err := s.Store.TrialBalance(r.Context(), companyID(r))
+type payData struct {
+	ID            string
+	Number        string
+	CustomerName  string
+	Total         ledger.Amount
+	Currency      string
+	TotalSEK      ledger.Amount
+	TotalSEKInput string
+	BankAccounts  []ledger.Account
+}
+
+func (s *Server) handlePayForm(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	co, ctx := companyID(r), r.Context()
+	v, err := s.Store.InvoiceForRender(ctx, co, id)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	if v.Status != "finalized" {
+		http.Redirect(w, r, "/invoices", http.StatusSeeOther)
+		return
+	}
+	accts, _ := s.Store.ChartAccounts(ctx, co)
+	var banks []ledger.Account
+	for _, a := range accts {
+		if strings.HasPrefix(a.Number, "19") {
+			banks = append(banks, a)
+		}
+	}
+	pd := s.base(r, "Registrera betalning")
+	pd.Data = payData{
+		ID: id.String(), Number: v.Number, CustomerName: v.Customer.Name,
+		Total: v.Total, Currency: v.Currency, TotalSEK: v.TotalSEK,
+		TotalSEKInput: oreDot(v.TotalSEK), BankAccounts: banks,
+	}
+	render(w, "pay", pd, http.StatusOK)
+}
+
+func (s *Server) handlePay(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = r.ParseForm()
+	date, err := time.Parse("2006-01-02", r.PostFormValue("date"))
+	if err != nil {
+		http.Redirect(w, r, "/invoices/"+id.String()+"/pay", http.StatusSeeOther)
+		return
+	}
+	account := strings.TrimSpace(r.PostFormValue("account"))
+	if account == "" {
+		account = "1930"
+	}
+	amount := parseKrOre(r.PostFormValue("amount"))
+	if amount <= 0 {
+		http.Redirect(w, r, "/invoices/"+id.String()+"/pay", http.StatusSeeOther)
+		return
+	}
+	_, err = s.Store.RecordPayment(r.Context(), companyID(r), id, date, account, amount)
+	switch {
+	case err == nil:
+		http.Redirect(w, r, "/invoices", http.StatusSeeOther)
+	case errors.Is(err, store.ErrPaymentMismatch), errors.Is(err, store.ErrNotFinalized):
+		http.Redirect(w, r, "/invoices/"+id.String()+"/pay", http.StatusSeeOther)
+	default:
+		s.fail(w, err)
+	}
+}
+
+type reportsData struct {
+	Statements ledger.Statements
+	Moms       moms.Declaration
+	Rows       []ledger.AccountBalance
+}
+
+func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
+	co, ctx := companyID(r), r.Context()
+	tb, err := s.Store.TrialBalance(ctx, co)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	names := map[string]string{}
+	if accts, err := s.Store.ChartAccounts(ctx, co); err == nil {
+		for _, a := range accts {
+			names[a.Number] = a.Name
+		}
+	}
+	bal := make(map[string]ledger.Amount, len(tb))
+	for _, r := range tb {
+		bal[r.Account] = r.Net
+	}
 	pd := s.base(r, "Rapporter")
-	pd.Data = struct{ Rows []ledger.AccountBalance }{Rows: tb}
+	pd.Data = reportsData{
+		Statements: ledger.BuildStatements(tb, func(a string) string { return names[a] }),
+		Moms:       moms.Report(bal),
+		Rows:       tb,
+	}
 	render(w, "reports", pd, http.StatusOK)
 }
 
@@ -592,6 +762,16 @@ func parseRatePPM(s string) int64 {
 // csvSafe neutralizes spreadsheet formula injection: a cell beginning with a
 // formula trigger is prefixed with an apostrophe so Excel/LibreOffice/Sheets
 // treat it as text.
+// oreDot formats öre with a '.' decimal (for <input type=number> defaults).
+func oreDot(a ledger.Amount) string {
+	v := int64(a)
+	neg := ""
+	if v < 0 {
+		neg, v = "-", -v
+	}
+	return fmt.Sprintf("%s%d.%02d", neg, v/100, v%100)
+}
+
 func csvSafe(s string) string {
 	if s == "" {
 		return s

@@ -57,10 +57,19 @@ func main() {
 	}
 	st := store.New(pool, kek)
 
+	// Backfill any chart accounts added since a company was bootstrapped (e.g.
+	// the currency-difference accounts) so existing books self-heal on deploy.
+	if err := st.SyncChart(ctx); err != nil {
+		slog.Error("sync chart", "err", err)
+		os.Exit(1)
+	}
+
+	secureCookies := os.Getenv("PARE_INSECURE_COOKIES") != "1"
 	srv := &handler.Server{
-		Store:     st,
-		Auth:      auth.New(gen.New(pool), os.Getenv("PARE_INSECURE_COOKIES") != "1"),
-		Gotenberg: render.NewGotenberg(cfg.GotenbergURL),
+		Store:         st,
+		Auth:          auth.New(gen.New(pool), secureCookies),
+		Gotenberg:     render.NewGotenberg(cfg.GotenbergURL),
+		SecureCookies: secureCookies,
 	}
 	if len(cfg.ShieldKey) == 32 && cfg.MCPKey != "" {
 		m, err := mcp.New(st, pool, cfg.ShieldKey, cfg.MCPKey)

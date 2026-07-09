@@ -84,6 +84,7 @@ var CoreChart = []Account{
 	{"3003", "Försäljning inom Sverige, 6 % moms", "SE06"},
 	{"3305", "Försäljning tjänster till land utanför EU", "EXP"},
 	{"3308", "Försäljning tjänster till annat EU-land", "RCEU"},
+	{"3960", "Valutakursvinster på fordringar och skulder av rörelsekaraktär", ""},
 	// Klass 4 Kostnader för varor och köpta tjänster
 	{"4531", "Inköp av tjänster från ett land utanför EU, 25 % moms", ""},
 	{"4535", "Inköp av tjänster från annat EU-land, 25 % moms", ""},
@@ -106,6 +107,7 @@ var CoreChart = []Account{
 	{"7220", "Löner till företagsledare", ""},
 	{"7510", "Arbetsgivaravgifter", ""},
 	{"7690", "Övriga personalkostnader", ""},
+	{"7960", "Valutakursförluster på fordringar och skulder av rörelsekaraktär", ""},
 	// Klass 8 Finansiella poster och årets resultat
 	{"8310", "Ränteintäkter från omsättningstillgångar", ""},
 	{"8410", "Räntekostnader för långfristiga skulder", ""},

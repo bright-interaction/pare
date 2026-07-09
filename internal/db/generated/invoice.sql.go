@@ -41,7 +41,7 @@ func (q *Queries) FinalizeInvoice(ctx context.Context, arg FinalizeInvoiceParams
 }
 
 const getInvoice = `-- name: GetInvoice :one
-SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm FROM invoices WHERE id = $1
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id FROM invoices WHERE id = $1
 `
 
 func (q *Queries) GetInvoice(ctx context.Context, id uuid.UUID) (Invoice, error) {
@@ -62,6 +62,41 @@ func (q *Queries) GetInvoice(ctx context.Context, id uuid.UUID) (Invoice, error)
 		&i.CreatedAt,
 		&i.FinalizedAt,
 		&i.RatePpm,
+		&i.PaidAt,
+		&i.PaymentVerificationID,
+	)
+	return i, err
+}
+
+const getInvoiceByNumber = `-- name: GetInvoiceByNumber :one
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id FROM invoices WHERE company_id = $1 AND number = $2
+`
+
+type GetInvoiceByNumberParams struct {
+	CompanyID uuid.UUID `json:"company_id"`
+	Number    string    `json:"number"`
+}
+
+func (q *Queries) GetInvoiceByNumber(ctx context.Context, arg GetInvoiceByNumberParams) (Invoice, error) {
+	row := q.db.QueryRow(ctx, getInvoiceByNumber, arg.CompanyID, arg.Number)
+	var i Invoice
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.CounterpartyID,
+		&i.Number,
+		&i.Status,
+		&i.InvoiceDate,
+		&i.DueDate,
+		&i.Currency,
+		&i.Ocr,
+		&i.NoteEnc,
+		&i.VerificationID,
+		&i.CreatedAt,
+		&i.FinalizedAt,
+		&i.RatePpm,
+		&i.PaidAt,
+		&i.PaymentVerificationID,
 	)
 	return i, err
 }
@@ -69,7 +104,7 @@ func (q *Queries) GetInvoice(ctx context.Context, id uuid.UUID) (Invoice, error)
 const insertInvoice = `-- name: InsertInvoice :one
 INSERT INTO invoices (company_id, counterparty_id, invoice_date, due_date, currency, rate_ppm, ocr, note_enc)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm
+RETURNING id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id
 `
 
 type InsertInvoiceParams struct {
@@ -110,6 +145,8 @@ func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) (I
 		&i.CreatedAt,
 		&i.FinalizedAt,
 		&i.RatePpm,
+		&i.PaidAt,
+		&i.PaymentVerificationID,
 	)
 	return i, err
 }
@@ -173,7 +210,7 @@ func (q *Queries) ListInvoiceLines(ctx context.Context, invoiceID uuid.UUID) ([]
 }
 
 const listInvoices = `-- name: ListInvoices :many
-SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm FROM invoices WHERE company_id = $1 ORDER BY created_at
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id FROM invoices WHERE company_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invoice, error) {
@@ -200,6 +237,8 @@ func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 			&i.CreatedAt,
 			&i.FinalizedAt,
 			&i.RatePpm,
+			&i.PaidAt,
+			&i.PaymentVerificationID,
 		); err != nil {
 			return nil, err
 		}
@@ -209,4 +248,30 @@ func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 		return nil, err
 	}
 	return items, nil
+}
+
+const markInvoicePaid = `-- name: MarkInvoicePaid :execrows
+UPDATE invoices
+SET status = 'paid', paid_at = $2, payment_verification_id = $3
+WHERE id = $1 AND company_id = $4 AND status = 'finalized'
+`
+
+type MarkInvoicePaidParams struct {
+	ID                    uuid.UUID   `json:"id"`
+	PaidAt                pgtype.Date `json:"paid_at"`
+	PaymentVerificationID pgtype.UUID `json:"payment_verification_id"`
+	CompanyID             uuid.UUID   `json:"company_id"`
+}
+
+func (q *Queries) MarkInvoicePaid(ctx context.Context, arg MarkInvoicePaidParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markInvoicePaid,
+		arg.ID,
+		arg.PaidAt,
+		arg.PaymentVerificationID,
+		arg.CompanyID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

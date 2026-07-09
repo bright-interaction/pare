@@ -24,6 +24,9 @@ var safeFields = map[string]bool{
 	"box_39_eu_services_kr": true, "box_48_input_kr": true, "box_49_to_pay_kr": true,
 	"at": true, "actor": true, "action": true, "target": true,
 	"total": true, "currency": true, "total_sek": true,
+	// invoice_number is a sequential business key (e.g. 2026-0001), not an
+	// identity; safe to echo so the AI can confirm which invoice it settled.
+	"invoice_number": true,
 }
 
 func TestShieldCompleteness(t *testing.T) {

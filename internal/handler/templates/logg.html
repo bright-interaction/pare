@@ -6,6 +6,7 @@
 {{if $d.Locked}}
 <div class="alert ok">Perioden är låst till och med {{$d.LockedThrough}}. Verifikat kan inte bokföras på eller före det datumet.</div>
 <form method="post" action="/unlock">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
   <div class="row">
     <div style="flex:3"><label>Anledning (loggas)</label><input name="reason" required placeholder="varför perioden låses upp"></div>
     <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn secondary" type="submit">Lås upp</button></div>
@@ -15,6 +16,7 @@
 <p class="muted">Ingen period är låst.</p>
 {{end}}
 <form method="post" action="/lock" style="margin-top:10px">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
   <div class="row">
     <div style="flex:0 0 200px"><label>Lås till och med</label><input name="through" type="date" required></div>
     <div style="flex:2"><label>Anledning (loggas)</label><input name="reason" placeholder="t.ex. månadsavslut mars"></div>

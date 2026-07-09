@@ -2,6 +2,7 @@
 <div class="toolbar"><h1 style="margin:0">Kunder</h1></div>
 <h2>Ny kund</h2>
 <form method="post" action="/counterparties">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
   <div class="row">
     <div><label>Namn</label><input name="name" required></div>
     <div><label>Org.nr</label><input name="orgnr"></div>
@@ -11,8 +12,14 @@
 <h2>Alla kunder</h2>
 {{if .Data}}
 <table>
-  <tr><th>Namn</th><th>Org.nr</th></tr>
-  {{range .Data}}<tr><td>{{.Name}}</td><td>{{.OrgNr}}</td></tr>{{end}}
+  <tr><th>Namn</th><th>Org.nr</th><th>Typ</th><th></th></tr>
+  {{range .Data}}<tr>
+    <td>{{if .Erased}}<span class="muted">{{.Name}}</span>{{else}}{{.Name}}{{end}}</td>
+    <td>{{.OrgNr}}</td>
+    <td>{{if eq .Kind "supplier"}}Leverantör{{else}}Kund{{end}}</td>
+    <td class="num">{{if .Erased}}<span class="pill draft">raderad</span>{{else}}<a class="btn small secondary" href="/counterparties/{{.ID}}/edit">Redigera</a>{{end}}</td>
+  </tr>{{end}}
 </table>
+<p class="muted" style="margin-top:10px;max-width:640px">Identitetsuppgifter lagras krypterade och skickas aldrig till AI-assistenten i klartext. Radering (GDPR) sker per kund under Redigera, och blockeras så länge kunden förekommer på bokförda fakturor som måste sparas i sju år (bokföringslagen).</p>
 {{else}}<div class="empty">Inga kunder än.</div>{{end}}
 {{end}}

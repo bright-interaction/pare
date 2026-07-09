@@ -59,3 +59,18 @@ SELECT * FROM counterparties WHERE id = $1;
 
 -- name: ListCounterparties :many
 SELECT * FROM counterparties WHERE company_id = $1 ORDER BY created_at;
+
+-- name: UpdateCounterparty :exec
+UPDATE counterparties
+SET kind = $3, name_enc = $4, orgnr_enc = $5, personnummer_enc = $6, address_enc = $7, iban_enc = $8
+WHERE id = $1 AND company_id = $2 AND erased_at IS NULL;
+
+-- name: EraseCounterparty :exec
+UPDATE counterparties
+SET name_enc = $3, orgnr_enc = '', personnummer_enc = '', address_enc = '', iban_enc = '',
+    erased_at = now()
+WHERE id = $1 AND company_id = $2 AND erased_at IS NULL;
+
+-- name: CountRetainedInvoices :one
+SELECT count(*) FROM invoices
+WHERE company_id = $1 AND counterparty_id = $2 AND status <> 'draft';

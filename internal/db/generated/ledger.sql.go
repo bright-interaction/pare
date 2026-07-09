@@ -12,6 +12,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countRetainedInvoices = `-- name: CountRetainedInvoices :one
+SELECT count(*) FROM invoices
+WHERE company_id = $1 AND counterparty_id = $2 AND status <> 'draft'
+`
+
+type CountRetainedInvoicesParams struct {
+	CompanyID      uuid.UUID `json:"company_id"`
+	CounterpartyID uuid.UUID `json:"counterparty_id"`
+}
+
+func (q *Queries) CountRetainedInvoices(ctx context.Context, arg CountRetainedInvoicesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRetainedInvoices, arg.CompanyID, arg.CounterpartyID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const eraseCounterparty = `-- name: EraseCounterparty :exec
+UPDATE counterparties
+SET name_enc = $3, orgnr_enc = '', personnummer_enc = '', address_enc = '', iban_enc = '',
+    erased_at = now()
+WHERE id = $1 AND company_id = $2 AND erased_at IS NULL
+`
+
+type EraseCounterpartyParams struct {
+	ID        uuid.UUID `json:"id"`
+	CompanyID uuid.UUID `json:"company_id"`
+	NameEnc   string    `json:"name_enc"`
+}
+
+func (q *Queries) EraseCounterparty(ctx context.Context, arg EraseCounterpartyParams) error {
+	_, err := q.db.Exec(ctx, eraseCounterparty, arg.ID, arg.CompanyID, arg.NameEnc)
+	return err
+}
+
 const getCompany = `-- name: GetCompany :one
 SELECT id, name, orgnr, dek_wrapped, created_at, locked_through FROM companies WHERE id = $1
 `
@@ -31,7 +66,7 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 }
 
 const getCounterparty = `-- name: GetCounterparty :one
-SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at FROM counterparties WHERE id = $1
+SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at FROM counterparties WHERE id = $1
 `
 
 func (q *Queries) GetCounterparty(ctx context.Context, id uuid.UUID) (Counterparty, error) {
@@ -47,6 +82,7 @@ func (q *Queries) GetCounterparty(ctx context.Context, id uuid.UUID) (Counterpar
 		&i.AddressEnc,
 		&i.IbanEnc,
 		&i.CreatedAt,
+		&i.ErasedAt,
 	)
 	return i, err
 }
@@ -81,7 +117,7 @@ const insertCounterparty = `-- name: InsertCounterparty :one
 INSERT INTO counterparties
     (company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at
+RETURNING id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at
 `
 
 type InsertCounterpartyParams struct {
@@ -115,6 +151,7 @@ func (q *Queries) InsertCounterparty(ctx context.Context, arg InsertCounterparty
 		&i.AddressEnc,
 		&i.IbanEnc,
 		&i.CreatedAt,
+		&i.ErasedAt,
 	)
 	return i, err
 }
@@ -246,7 +283,7 @@ func (q *Queries) ListCompanies(ctx context.Context) ([]Company, error) {
 }
 
 const listCounterparties = `-- name: ListCounterparties :many
-SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at FROM counterparties WHERE company_id = $1 ORDER BY created_at
+SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at FROM counterparties WHERE company_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListCounterparties(ctx context.Context, companyID uuid.UUID) ([]Counterparty, error) {
@@ -268,6 +305,7 @@ func (q *Queries) ListCounterparties(ctx context.Context, companyID uuid.UUID) (
 			&i.AddressEnc,
 			&i.IbanEnc,
 			&i.CreatedAt,
+			&i.ErasedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -403,6 +441,37 @@ func (q *Queries) TrialBalance(ctx context.Context, companyID uuid.UUID) ([]Tria
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCounterparty = `-- name: UpdateCounterparty :exec
+UPDATE counterparties
+SET kind = $3, name_enc = $4, orgnr_enc = $5, personnummer_enc = $6, address_enc = $7, iban_enc = $8
+WHERE id = $1 AND company_id = $2 AND erased_at IS NULL
+`
+
+type UpdateCounterpartyParams struct {
+	ID              uuid.UUID `json:"id"`
+	CompanyID       uuid.UUID `json:"company_id"`
+	Kind            string    `json:"kind"`
+	NameEnc         string    `json:"name_enc"`
+	OrgnrEnc        string    `json:"orgnr_enc"`
+	PersonnummerEnc string    `json:"personnummer_enc"`
+	AddressEnc      string    `json:"address_enc"`
+	IbanEnc         string    `json:"iban_enc"`
+}
+
+func (q *Queries) UpdateCounterparty(ctx context.Context, arg UpdateCounterpartyParams) error {
+	_, err := q.db.Exec(ctx, updateCounterparty,
+		arg.ID,
+		arg.CompanyID,
+		arg.Kind,
+		arg.NameEnc,
+		arg.OrgnrEnc,
+		arg.PersonnummerEnc,
+		arg.AddressEnc,
+		arg.IbanEnc,
+	)
+	return err
 }
 
 const upsertAccount = `-- name: UpsertAccount :exec

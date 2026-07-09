@@ -23,6 +23,7 @@
   input:focus,select:focus{outline:2px solid var(--accent-weak);border-color:var(--accent)}
   button.btn,.btn{display:inline-block;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer}
   .btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn.danger{background:#fff;color:var(--danger);border:1px solid var(--danger)}
   .btn.small{padding:5px 10px;font-size:13px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
@@ -42,6 +43,13 @@
   .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   .muted{color:var(--muted)} .empty{color:var(--muted);padding:24px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:12px}
   .linegrid{display:grid;grid-template-columns:3fr 1fr 1fr 1.4fr;gap:8px;margin-bottom:6px}
+  .report-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  @media(max-width:760px){.report-grid{grid-template-columns:1fr}}
+  .report-grid h2{margin-top:0}
+  tr.grouprow td{font-weight:600;color:var(--ink);background:#fbfcfd;text-transform:none;letter-spacing:0;font-size:13px}
+  tr.subtotalrow td{font-weight:600;border-top:1px solid var(--line)}
+  tr.totalrow td{font-weight:700;background:var(--accent-weak);color:var(--accent)}
+  .momstable{max-width:520px}
 </style></head>
 <body>
 {{if .Email}}
@@ -56,7 +64,7 @@
     <a href="/logg">Logg</a>
   </nav>
   <div class="who">{{.CompanyName}} · {{.Email}}
-    <form method="post" action="/logout"><button type="submit">Logga ut</button></form>
+    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Logga ut</button></form>
   </div>
 </header>
 {{end}}

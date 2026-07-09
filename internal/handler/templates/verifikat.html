@@ -3,6 +3,7 @@
 <div class="toolbar"><h1 style="margin:0">Verifikat</h1></div>
 <h2>Nytt verifikat</h2>
 <form method="post" action="/verifications">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
   <div class="row">
     <div style="flex:0 0 90px"><label>Serie</label><input name="series" value="A" required></div>
     <div style="flex:0 0 170px"><label>Datum</label><input name="date" type="date" required></div>
@@ -28,7 +29,7 @@
     <td>{{.Series}}{{.Number}}</td>
     <td>{{.Date}}</td>
     <td>{{.Description}}</td>
-    <td class="num">{{if not .IsReversal}}<form method="post" action="/verifications/{{.ID}}/undo" style="display:inline"><button class="btn small secondary" type="submit">Ångra</button></form>{{else}}<span class="muted">rättelse</span>{{end}}</td>
+    <td class="num">{{if not .IsReversal}}<form method="post" action="/verifications/{{.ID}}/undo" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small secondary" type="submit">Ångra</button></form>{{else}}<span class="muted">rättelse</span>{{end}}</td>
   </tr>{{end}}
 </table>
 {{else}}<div class="empty">Inga verifikat än.</div>{{end}}

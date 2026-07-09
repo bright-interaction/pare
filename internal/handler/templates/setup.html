@@ -3,6 +3,7 @@
   <h1>Välkommen till Pare</h1>
   <p>Skapa ditt konto och ditt företag för att komma igång.</p>
   <form method="post" action="/setup">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
     <label>E-post</label><input type="email" name="email" required>
     <label>Lösenord</label><input type="password" name="password" required minlength="8">
     <label>Företagsnamn</label><input name="company" required>
