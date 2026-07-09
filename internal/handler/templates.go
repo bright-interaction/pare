@@ -24,7 +24,7 @@ var funcs = template.FuncMap{
 
 var pages = func() map[string]*template.Template {
 	m := map[string]*template.Template{}
-	for _, p := range []string{"setup", "login", "dashboard", "counterparties", "invoices", "invoice_new", "reports"} {
+	for _, p := range []string{"setup", "login", "dashboard", "counterparties", "invoices", "invoice_new", "verifikat", "reports", "logg"} {
 		m[p] = template.Must(template.New("").Funcs(funcs).ParseFS(tmplFS, "templates/layout.html", "templates/"+p+".html"))
 	}
 	return m

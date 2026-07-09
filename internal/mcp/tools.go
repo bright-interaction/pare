@@ -56,6 +56,13 @@ func (s *Server) register() {
 		run:    runExportSIE,
 	})
 	s.add(tool{
+		name:   "pare_recent_activity",
+		desc:   "The audit log: recent postings by ai, users and the system, with actor attribution. No identities. Undo is a human-only action in the UI.",
+		schema: emptySchema(),
+		proto:  &auditResult{},
+		run:    runAudit,
+	})
+	s.add(tool{
 		name:  "pare_post_verification",
 		desc:  "Post a manual balanced verifikat (debit must equal credit). Immutable once posted.",
 		write: true,
@@ -141,6 +148,18 @@ type sieResult struct {
 type postResult struct {
 	VerificationID string `json:"verification_id"`
 	Ok             bool   `json:"ok"`
+}
+
+type auditResult struct {
+	Entries []auditRow `json:"entries"`
+}
+
+type auditRow struct {
+	At     string `json:"at"`
+	Actor  string `json:"actor"`
+	Action string `json:"action"`
+	Target string `json:"target"`
+	Detail string `json:"detail"`
 }
 
 // --- handlers ---
@@ -237,6 +256,24 @@ func runExportSIE(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, erro
 		VoucherCount: len(exp.Vouchers),
 		SIEBase64:    base64.StdEncoding.EncodeToString(buf.Bytes()),
 	}, nil
+}
+
+func runAudit(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) {
+	entries, err := tc.store.ListAudit(ctx, tc.company, 50)
+	if err != nil {
+		return nil, err
+	}
+	res := &auditResult{}
+	for _, e := range entries {
+		res.Entries = append(res.Entries, auditRow{
+			At:     e.At.Format(time.RFC3339),
+			Actor:  e.Actor,
+			Action: e.Action,
+			Target: e.TargetType + ":" + e.TargetID,
+			Detail: e.Detail,
+		})
+	}
+	return res, nil
 }
 
 func runPostVerification(ctx context.Context, tc toolCtx, args json.RawMessage) (any, error) {

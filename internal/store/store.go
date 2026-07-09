@@ -34,6 +34,23 @@ func New(pool *pgxpool.Pool, kek *crypto.KEK) *Store {
 	return &Store{pool: pool, q: gen.New(pool), kek: kek}
 }
 
+// ErrUnknownAccount is returned when a posting references an account not in the
+// company's chart (the AI cannot invent accounts).
+var ErrUnknownAccount = errors.New("store: account not in the chart of accounts")
+
+// inTx runs fn inside a transaction, committing on success.
+func (s *Store) inTx(ctx context.Context, fn func(*gen.Queries) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := fn(s.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // BootstrapCompany creates a company with a fresh wrapped DEK and seeds the
 // core chart of accounts. Returns the new company id.
 func (s *Store) BootstrapCompany(ctx context.Context, name, orgnr string) (uuid.UUID, error) {
@@ -79,19 +96,20 @@ func (s *Store) companyDEK(ctx context.Context, companyID uuid.UUID) (*crypto.DE
 // one transaction, assigning the next number in the series. reversalOf may be
 // uuid.Nil. The row is written already posted, so it is immutable afterward.
 func (s *Store) PostVerification(ctx context.Context, companyID uuid.UUID, series string, date time.Time, description string, lines []ledger.Line, reversalOf uuid.UUID) (uuid.UUID, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return uuid.Nil, err
+	var total ledger.Amount
+	for _, l := range lines {
+		total += l.Debit
 	}
-	defer tx.Rollback(ctx)
-	id, err := s.postVerification(ctx, s.q.WithTx(tx), companyID, series, date, description, lines, reversalOf)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return uuid.Nil, err
-	}
-	return id, nil
+	var id uuid.UUID
+	err := s.inTx(ctx, func(qtx *gen.Queries) error {
+		var e error
+		id, e = s.postVerification(ctx, qtx, companyID, series, date, description, lines, reversalOf)
+		if e != nil {
+			return e
+		}
+		return s.logAudit(ctx, qtx, companyID, "post_verification", "verification", id.String(), series+" "+total.String())
+	})
+	return id, err
 }
 
 // postVerification is the transactional core shared by PostVerification and
@@ -100,6 +118,26 @@ func (s *Store) postVerification(ctx context.Context, qtx *gen.Queries, companyI
 	v := ledger.Verification{Series: series, Date: date, Description: description, Lines: lines}
 	if err := v.Validate(); err != nil {
 		return uuid.Nil, err
+	}
+	co, err := qtx.GetCompany(ctx, companyID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if co.LockedThrough.Valid && !date.After(co.LockedThrough.Time) {
+		return uuid.Nil, ErrPeriodClosed
+	}
+	accts, err := qtx.ListAccounts(ctx, companyID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	known := make(map[string]bool, len(accts))
+	for _, a := range accts {
+		known[a.Number] = true
+	}
+	for _, l := range lines {
+		if !known[l.Account] {
+			return uuid.Nil, fmt.Errorf("%w: %s", ErrUnknownAccount, l.Account)
+		}
 	}
 	num, err := qtx.NextVerificationNumber(ctx, gen.NextVerificationNumberParams{CompanyID: companyID, Series: series})
 	if err != nil {
@@ -196,6 +234,9 @@ func (s *Store) CreateCounterparty(ctx context.Context, companyID uuid.UUID, cp 
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("store: insert counterparty: %w", err)
+	}
+	if err := s.logAudit(ctx, s.q, companyID, "create_counterparty", "counterparty", row.ID.String(), cp.Kind); err != nil {
+		return uuid.Nil, err
 	}
 	return row.ID, nil
 }

@@ -7,7 +7,22 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
+	"github.com/brightinteraction/pare/internal/ledger"
 )
+
+// ChartAccounts returns the company's chart of accounts for UI dropdowns.
+func (s *Store) ChartAccounts(ctx context.Context, companyID uuid.UUID) ([]ledger.Account, error) {
+	rows, err := s.q.ListAccounts(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ledger.Account, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ledger.Account{Number: r.Number, Name: r.Name, DefaultVATCode: r.DefaultVatCode})
+	}
+	return out, nil
+}
 
 // CompanyInfo is the operator's own company (name + org number).
 type CompanyInfo struct {

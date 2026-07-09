@@ -13,7 +13,7 @@ import (
 )
 
 const getCompany = `-- name: GetCompany :one
-SELECT id, name, orgnr, dek_wrapped, created_at FROM companies WHERE id = $1
+SELECT id, name, orgnr, dek_wrapped, created_at, locked_through FROM companies WHERE id = $1
 `
 
 func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error) {
@@ -25,6 +25,7 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 		&i.Orgnr,
 		&i.DekWrapped,
 		&i.CreatedAt,
+		&i.LockedThrough,
 	)
 	return i, err
 }
@@ -53,7 +54,7 @@ func (q *Queries) GetCounterparty(ctx context.Context, id uuid.UUID) (Counterpar
 const insertCompany = `-- name: InsertCompany :one
 INSERT INTO companies (name, orgnr, dek_wrapped)
 VALUES ($1, $2, $3)
-RETURNING id, name, orgnr, dek_wrapped, created_at
+RETURNING id, name, orgnr, dek_wrapped, created_at, locked_through
 `
 
 type InsertCompanyParams struct {
@@ -71,6 +72,7 @@ func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (C
 		&i.Orgnr,
 		&i.DekWrapped,
 		&i.CreatedAt,
+		&i.LockedThrough,
 	)
 	return i, err
 }
@@ -213,7 +215,7 @@ func (q *Queries) ListAccounts(ctx context.Context, companyID uuid.UUID) ([]Acco
 }
 
 const listCompanies = `-- name: ListCompanies :many
-SELECT id, name, orgnr, dek_wrapped, created_at FROM companies ORDER BY created_at
+SELECT id, name, orgnr, dek_wrapped, created_at, locked_through FROM companies ORDER BY created_at
 `
 
 func (q *Queries) ListCompanies(ctx context.Context) ([]Company, error) {
@@ -231,6 +233,7 @@ func (q *Queries) ListCompanies(ctx context.Context) ([]Company, error) {
 			&i.Orgnr,
 			&i.DekWrapped,
 			&i.CreatedAt,
+			&i.LockedThrough,
 		); err != nil {
 			return nil, err
 		}
