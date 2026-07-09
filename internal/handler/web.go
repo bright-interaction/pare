@@ -5,6 +5,7 @@ package handler
 
 import (
 	"context"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -338,6 +339,34 @@ func (s *Server) handleSIE(w http.ResponseWriter, r *http.Request) {
 	if err := exp.Write(w); err != nil {
 		slog.Error("sie write", "err", err)
 	}
+}
+
+// handleCSV exports the ledger transactions as CSV (no lock-in, universal).
+func (s *Server) handleCSV(w http.ResponseWriter, r *http.Request) {
+	exp, err := s.Store.ExportSIE(r.Context(), companyID(r), time.Now().UTC())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=pare-verifikat.csv")
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"datum", "serie", "nummer", "konto", "debet_ore", "kredit_ore", "beskrivning"})
+	for _, v := range exp.Vouchers {
+		for _, l := range v.Lines {
+			debit, credit := int64(0), int64(0)
+			if l.Amount >= 0 {
+				debit = l.Amount
+			} else {
+				credit = -l.Amount
+			}
+			_ = cw.Write([]string{
+				v.Date.Format("2006-01-02"), v.Series, strconv.Itoa(v.Number), l.Account,
+				strconv.FormatInt(debit, 10), strconv.FormatInt(credit, 10), v.Text,
+			})
+		}
+	}
+	cw.Flush()
 }
 
 // --- verifikat, undo, period lock, audit log ---
