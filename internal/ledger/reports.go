@@ -103,15 +103,18 @@ func ResultOf(tb []AccountBalance) Amount {
 // (resultaträkning + balansräkning from the same balances). nameFn resolves an
 // account number to its display name (pass nil to skip names).
 func BuildStatements(tb []AccountBalance, nameFn func(account string) string) Statements {
-	return BuildStatementsPeriod(tb, tb, ResultOf(tb), nameFn)
+	return BuildStatementsPeriod(tb, tb, nameFn)
 }
 
 // BuildStatementsPeriod builds statements for a period: the resultaträkning
-// (income/expense/financial) comes from plTB (a period slice), the balansräkning
-// (assets/equity/liabilities) from bsTB (cumulative as of the period end), and
-// the synthetic "årets resultat" equity row from yearResult (the fiscal
-// year-to-date result), so the balance sheet balances as of the period end.
-func BuildStatementsPeriod(plTB, bsTB []AccountBalance, yearResult Amount, nameFn func(account string) string) Statements {
+// (income/expense/financial) comes from plTB (a period slice, typically
+// excluding year-end close vouchers), the balansräkning (assets/equity/
+// liabilities) from bsTB (cumulative as of the period end). The synthetic "årets
+// resultat" equity row is the figure that makes the balance sheet balance
+// (assets - posted equity - posted liabilities): for an OPEN year that equals the
+// live result; for a CLOSED year the result is already posted to 2099 so it is
+// zero. This is correct without knowing the close state.
+func BuildStatementsPeriod(plTB, bsTB []AccountBalance, nameFn func(account string) string) Statements {
 	name := func(acc string) string {
 		if nameFn == nil {
 			return ""
@@ -157,15 +160,15 @@ func BuildStatementsPeriod(plTB, bsTB []AccountBalance, yearResult Amount, nameF
 		}
 	}
 
-	// Fold the fiscal year-to-date result into equity so the balansräkning
-	// balances. Not a posted account: it is the calculated result before
-	// year-end close.
-	if yearResult != 0 {
+	// Fold the balancing figure into equity so the balansräkning balances. For an
+	// open year this is the live result (not yet posted to equity); for a closed
+	// year the result is already on 2099, so this is zero and no row is added.
+	if bal := s.AssetTotal - s.EquityTotal - s.LiabilityTotal; bal != 0 {
 		s.Equity = append(s.Equity, StatementRow{
 			Account: "", Name: "Årets resultat (beräknat)",
-			Class: ClassEquityLiability, Amount: yearResult,
+			Class: ClassEquityLiability, Amount: bal,
 		})
-		s.EquityTotal += yearResult
+		s.EquityTotal += bal
 	}
 	return s
 }

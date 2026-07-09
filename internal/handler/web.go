@@ -771,20 +771,15 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 	yearStart := time.Date(to.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
 	from := formDateOr(r.URL.Query().Get("from"), yearStart)
 
-	// Resultaträkning + moms over the chosen period; balansräkning as of the end.
-	periodTB, err := s.Store.TrialBalanceBetween(ctx, co, from, to)
+	// Resultaträkning over the period (excluding year-end close vouchers, series
+	// "O", so a closed year still shows its real P&L); moms over the period;
+	// balansräkning as of the period end.
+	periodTB, err := s.Store.TrialBalanceBetweenExclSeries(ctx, co, from, to, "O")
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
 	asOfTB, err := s.Store.TrialBalanceAsOf(ctx, co, to)
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	// The equity "årets resultat" is the fiscal year-to-date result (year start
-	// -> period end), independent of a custom from-date.
-	yearTB, err := s.Store.TrialBalanceBetween(ctx, co, yearStart, to)
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -802,7 +797,7 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 	}
 	pd := s.base(r, "Rapporter")
 	pd.Data = reportsData{
-		Statements: ledger.BuildStatementsPeriod(periodTB, asOfTB, ledger.ResultOf(yearTB), func(a string) string { return names[a] }),
+		Statements: ledger.BuildStatementsPeriod(periodTB, asOfTB, func(a string) string { return names[a] }),
 		Moms:       moms.Report(bal),
 		Rows:       asOfTB,
 		From:       from.Format("2006-01-02"),
@@ -821,6 +816,57 @@ func (s *Server) handleSIE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=pare-export.se")
 	if err := exp.Write(w); err != nil {
 		slog.Error("sie write", "err", err)
+	}
+}
+
+func (s *Server) handleFiscalYears(w http.ResponseWriter, r *http.Request) {
+	fys, err := s.Store.ListFiscalYears(r.Context(), companyID(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	pd := s.base(r, "Bokslut")
+	switch r.URL.Query().Get("msg") {
+	case "closed":
+		pd.Flash = "Räkenskapsåret stängdes och perioden låstes."
+	case "nothing":
+		pd.Error = "Inget resultat att stänga för det året."
+	case "added":
+		pd.Flash = "Räkenskapsår tillagt."
+	}
+	pd.Data = fys
+	render(w, "bokslut", pd, http.StatusOK)
+}
+
+func (s *Server) handleAddFiscalYear(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	year, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("year")))
+	if err != nil || year < 2000 || year > 2100 {
+		http.Redirect(w, r, "/bokslut", http.StatusSeeOther)
+		return
+	}
+	if err := s.Store.EnsureFiscalYear(r.Context(), companyID(r), year); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/bokslut?msg=added", http.StatusSeeOther)
+}
+
+func (s *Server) handleCloseFiscalYear(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	switch _, err := s.Store.CloseFiscalYear(r.Context(), companyID(r), id); {
+	case err == nil:
+		http.Redirect(w, r, "/bokslut?msg=closed", http.StatusSeeOther)
+	case errors.Is(err, store.ErrNothingToClose):
+		http.Redirect(w, r, "/bokslut?msg=nothing", http.StatusSeeOther)
+	case errors.Is(err, store.ErrYearClosed):
+		http.Redirect(w, r, "/bokslut", http.StatusSeeOther)
+	default:
+		s.fail(w, err)
 	}
 }
 

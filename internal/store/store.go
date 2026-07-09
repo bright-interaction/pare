@@ -78,6 +78,8 @@ func (s *Store) BootstrapCompany(ctx context.Context, name, orgnr string) (uuid.
 			return uuid.Nil, fmt.Errorf("store: seed account %s: %w", a.Number, err)
 		}
 	}
+	// Seed the current calendar year as the first räkenskapsår (best-effort).
+	_ = s.EnsureFiscalYear(ctx, co.ID, time.Now().Year())
 	return co.ID, nil
 }
 
@@ -217,6 +219,23 @@ func (s *Store) TrialBalance(ctx context.Context, companyID uuid.UUID) ([]ledger
 // [from, to]. Used for period statements (resultaträkning) and the momsrapport.
 func (s *Store) TrialBalanceBetween(ctx context.Context, companyID uuid.UUID, from, to time.Time) ([]ledger.AccountBalance, error) {
 	rows, err := s.q.TrialBalanceBetween(ctx, gen.TrialBalanceBetweenParams{CompanyID: companyID, Vdate: pgDate(from), Vdate_2: pgDate(to)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ledger.AccountBalance, len(rows))
+	for i, r := range rows {
+		out[i] = ledger.AccountBalance{Account: r.Account, Class: ledger.Classify(r.Account), Net: ledger.Amount(r.NetOre)}
+	}
+	return out, nil
+}
+
+// TrialBalanceBetweenExclSeries is TrialBalanceBetween excluding one voucher
+// series (e.g. "O" bokslut close), so the resultaträkning of a closed year shows
+// its real P&L instead of the zeroed post-close figures.
+func (s *Store) TrialBalanceBetweenExclSeries(ctx context.Context, companyID uuid.UUID, from, to time.Time, series string) ([]ledger.AccountBalance, error) {
+	rows, err := s.q.TrialBalanceBetweenExclSeries(ctx, gen.TrialBalanceBetweenExclSeriesParams{
+		CompanyID: companyID, Vdate: pgDate(from), Vdate_2: pgDate(to), Series: series,
+	})
 	if err != nil {
 		return nil, err
 	}

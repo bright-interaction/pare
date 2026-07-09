@@ -555,6 +555,54 @@ func (q *Queries) TrialBalanceBetween(ctx context.Context, arg TrialBalanceBetwe
 	return items, nil
 }
 
+const trialBalanceBetweenExclSeries = `-- name: TrialBalanceBetweenExclSeries :many
+SELECT l.account, SUM(l.debit_ore - l.credit_ore)::BIGINT AS net_ore
+FROM verification_lines l
+JOIN verifications v ON v.id = l.verification_id
+WHERE v.company_id = $1 AND v.vdate >= $2 AND v.vdate <= $3 AND v.series <> $4
+GROUP BY l.account
+ORDER BY l.account
+`
+
+type TrialBalanceBetweenExclSeriesParams struct {
+	CompanyID uuid.UUID   `json:"company_id"`
+	Vdate     pgtype.Date `json:"vdate"`
+	Vdate_2   pgtype.Date `json:"vdate_2"`
+	Series    string      `json:"series"`
+}
+
+type TrialBalanceBetweenExclSeriesRow struct {
+	Account string `json:"account"`
+	NetOre  int64  `json:"net_ore"`
+}
+
+// Period balances excluding a voucher series (used for the resultaträkning so a
+// closed year still shows its real P&L, not the zeroed post-close figures).
+func (q *Queries) TrialBalanceBetweenExclSeries(ctx context.Context, arg TrialBalanceBetweenExclSeriesParams) ([]TrialBalanceBetweenExclSeriesRow, error) {
+	rows, err := q.db.Query(ctx, trialBalanceBetweenExclSeries,
+		arg.CompanyID,
+		arg.Vdate,
+		arg.Vdate_2,
+		arg.Series,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TrialBalanceBetweenExclSeriesRow
+	for rows.Next() {
+		var i TrialBalanceBetweenExclSeriesRow
+		if err := rows.Scan(&i.Account, &i.NetOre); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateCompanyProfile = `-- name: UpdateCompanyProfile :exec
 UPDATE companies
 SET name = $2, orgnr = $3, momsregnr = $4, address = $5, postal_code = $6,

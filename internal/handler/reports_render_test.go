@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/brightinteraction/pare/internal/ledger"
 	"github.com/brightinteraction/pare/internal/moms"
@@ -63,6 +64,10 @@ func TestFormTemplatesRender(t *testing.T) {
 	}}, "Betala leverantörsfaktura", `value="tok"`)
 
 	renderOK(t, "sie_import", pageData{Title: "Importera SIE", Email: "op@x.se", CSRF: "tok"}, "Importera SIE", `name="csrf" value="tok"`)
+
+	renderOK(t, "bokslut", pageData{Title: "Bokslut", Email: "op@x.se", CSRF: "tok", Data: []store.FiscalYear{
+		{Label: "2026", StartsOn: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), EndsOn: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), Closed: false},
+	}}, "räkenskapsår", "Stäng år", "2026")
 }
 
 // The reports template references many nested Statements/Declaration fields;

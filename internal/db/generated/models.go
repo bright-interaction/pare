@@ -63,11 +63,12 @@ type Counterparty struct {
 }
 
 type FiscalYear struct {
-	ID        uuid.UUID   `json:"id"`
-	CompanyID uuid.UUID   `json:"company_id"`
-	Label     string      `json:"label"`
-	StartsOn  pgtype.Date `json:"starts_on"`
-	EndsOn    pgtype.Date `json:"ends_on"`
+	ID        uuid.UUID          `json:"id"`
+	CompanyID uuid.UUID          `json:"company_id"`
+	Label     string             `json:"label"`
+	StartsOn  pgtype.Date        `json:"starts_on"`
+	EndsOn    pgtype.Date        `json:"ends_on"`
+	ClosedAt  pgtype.Timestamptz `json:"closed_at"`
 }
 
 type Invoice struct {
