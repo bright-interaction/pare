@@ -212,6 +212,34 @@ func (s *Store) TrialBalance(ctx context.Context, companyID uuid.UUID) ([]ledger
 	return out, nil
 }
 
+// TrialBalanceBetween returns per-account net balances for verifikat dated in
+// [from, to]. Used for period statements (resultaträkning) and the momsrapport.
+func (s *Store) TrialBalanceBetween(ctx context.Context, companyID uuid.UUID, from, to time.Time) ([]ledger.AccountBalance, error) {
+	rows, err := s.q.TrialBalanceBetween(ctx, gen.TrialBalanceBetweenParams{CompanyID: companyID, Vdate: pgDate(from), Vdate_2: pgDate(to)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ledger.AccountBalance, len(rows))
+	for i, r := range rows {
+		out[i] = ledger.AccountBalance{Account: r.Account, Class: ledger.Classify(r.Account), Net: ledger.Amount(r.NetOre)}
+	}
+	return out, nil
+}
+
+// TrialBalanceAsOf returns cumulative per-account net balances for verifikat
+// dated on or before `to`. Used for the balansräkning (a point-in-time snapshot).
+func (s *Store) TrialBalanceAsOf(ctx context.Context, companyID uuid.UUID, to time.Time) ([]ledger.AccountBalance, error) {
+	rows, err := s.q.TrialBalanceAsOf(ctx, gen.TrialBalanceAsOfParams{CompanyID: companyID, Vdate: pgDate(to)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ledger.AccountBalance, len(rows))
+	for i, r := range rows {
+		out[i] = ledger.AccountBalance{Account: r.Account, Class: ledger.Classify(r.Account), Net: ledger.Amount(r.NetOre)}
+	}
+	return out, nil
+}
+
 // Counterparty is the decrypted form of a customer or supplier.
 type Counterparty struct {
 	ID           uuid.UUID
@@ -336,4 +364,11 @@ func pgUUID(id uuid.UUID) pgtype.UUID {
 		return pgtype.UUID{}
 	}
 	return pgtype.UUID{Bytes: id, Valid: true}
+}
+
+func uuidFromPg(v pgtype.UUID) uuid.UUID {
+	if !v.Valid {
+		return uuid.Nil
+	}
+	return uuid.UUID(v.Bytes)
 }

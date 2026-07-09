@@ -40,6 +40,7 @@ type InvoiceSummary struct {
 	TotalSEK      ledger.Amount // booked to Kundfordringar in SEK
 	DueDate       string
 	Status        string
+	Overdue       bool // finalized + past due date
 }
 
 // UnpaidInvoices lists finalized invoices that are not yet paid.

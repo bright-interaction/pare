@@ -8,13 +8,15 @@
     <td>{{.CustomerName}}</td>
     <td>{{.DueDate}}</td>
     <td class="num">{{.Total}} {{.Currency}}</td>
-    <td><span class="pill {{.Status}}">{{.Status}}</span></td>
+    <td><span class="pill {{.Status}}">{{.Status}}</span>{{if .Overdue}} <span class="pill draft">förfallen</span>{{end}}</td>
     <td class="num">
       {{if eq .Status "draft"}}
         <form method="post" action="/invoices/{{.ID}}/finalize" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small" type="submit">Slutför</button></form>
+        <form method="post" action="/invoices/{{.ID}}/delete" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small danger" type="submit">Ta bort</button></form>
       {{else if eq .Status "finalized"}}
         <a class="btn small" href="/invoices/{{.ID}}/pay">Betala</a>
         <a class="btn small secondary" href="/invoices/{{.ID}}/pdf">PDF</a>
+        <form method="post" action="/invoices/{{.ID}}/credit" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small secondary" type="submit">Kreditera</button></form>
       {{else}}
         <a class="btn small secondary" href="/invoices/{{.ID}}/pdf">PDF</a>
       {{end}}

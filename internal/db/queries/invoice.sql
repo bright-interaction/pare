@@ -34,6 +34,15 @@ SET status = 'finalized', number = $2, invoice_date = $3, due_date = $4,
     verification_id = $5, finalized_at = now()
 WHERE id = $1 AND company_id = $6 AND status = 'draft';
 
+-- name: DeleteDraftInvoice :execrows
+DELETE FROM invoices WHERE id = $1 AND company_id = $2 AND status = 'draft';
+
+-- name: SetInvoiceCredits :exec
+UPDATE invoices SET credits_invoice_id = $2 WHERE id = $1;
+
+-- name: MarkInvoiceCancelled :execrows
+UPDATE invoices SET status = 'cancelled' WHERE id = $1 AND company_id = $2 AND status = 'finalized';
+
 -- name: MarkInvoicePaid :execrows
 UPDATE invoices
 SET status = 'paid', paid_at = $2, payment_verification_id = $3

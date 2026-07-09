@@ -24,11 +24,12 @@
 <h2>Bokförda verifikat</h2>
 {{if $d.Verifications}}
 <table>
-  <tr><th>Verifikat</th><th>Datum</th><th>Beskrivning</th><th></th></tr>
+  <tr><th>Verifikat</th><th>Datum</th><th>Beskrivning</th><th>Kontering</th><th></th></tr>
   {{range $d.Verifications}}<tr>
     <td>{{.Series}}{{.Number}}</td>
     <td>{{.Date}}</td>
     <td>{{.Description}}</td>
+    <td class="muted" style="font-size:12px">{{range .Lines}}<div>{{.Account}} {{if gt .Debit 0}}debet {{.Debit}}{{else}}kredit {{.Credit}}{{end}}</div>{{end}}</td>
     <td class="num">{{if not .IsReversal}}<form method="post" action="/verifications/{{.ID}}/undo" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small secondary" type="submit">Ångra</button></form>{{else}}<span class="muted">rättelse</span>{{end}}</td>
   </tr>{{end}}
 </table>

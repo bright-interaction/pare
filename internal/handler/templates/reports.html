@@ -2,6 +2,12 @@
 {{$s := .Data.Statements}}
 {{$m := .Data.Moms}}
 <div class="toolbar"><h1 style="margin:0">Rapporter</h1><div><a class="btn secondary" href="/sie/import">Importera SIE</a> <a class="btn secondary" href="/export.csv">CSV</a> <a class="btn" href="/sie">Exportera SIE</a></div></div>
+<form method="get" action="/reports" class="row" style="max-width:520px;margin-bottom:18px">
+  <div><label>Från</label><input name="from" type="date" value="{{.Data.From}}"></div>
+  <div><label>Till</label><input name="to" type="date" value="{{.Data.To}}"></div>
+  <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn secondary" type="submit">Visa period</button></div>
+</form>
+<p class="muted" style="margin-top:-8px">Resultaträkning och moms avser perioden {{.Data.From}} till {{.Data.To}}. Balansräkningen visar ställningen per {{.Data.To}}.</p>
 
 <div class="report-grid">
   <section>

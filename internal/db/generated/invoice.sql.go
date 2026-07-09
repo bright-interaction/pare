@@ -34,6 +34,23 @@ func (q *Queries) AllocInvoiceNumber(ctx context.Context, arg AllocInvoiceNumber
 	return next_no, err
 }
 
+const deleteDraftInvoice = `-- name: DeleteDraftInvoice :execrows
+DELETE FROM invoices WHERE id = $1 AND company_id = $2 AND status = 'draft'
+`
+
+type DeleteDraftInvoiceParams struct {
+	ID        uuid.UUID `json:"id"`
+	CompanyID uuid.UUID `json:"company_id"`
+}
+
+func (q *Queries) DeleteDraftInvoice(ctx context.Context, arg DeleteDraftInvoiceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDraftInvoice, arg.ID, arg.CompanyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const finalizeInvoice = `-- name: FinalizeInvoice :exec
 UPDATE invoices
 SET status = 'finalized', number = $2, invoice_date = $3, due_date = $4,
@@ -63,7 +80,7 @@ func (q *Queries) FinalizeInvoice(ctx context.Context, arg FinalizeInvoiceParams
 }
 
 const getInvoice = `-- name: GetInvoice :one
-SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id FROM invoices WHERE id = $1
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id, credits_invoice_id FROM invoices WHERE id = $1
 `
 
 func (q *Queries) GetInvoice(ctx context.Context, id uuid.UUID) (Invoice, error) {
@@ -86,12 +103,13 @@ func (q *Queries) GetInvoice(ctx context.Context, id uuid.UUID) (Invoice, error)
 		&i.RatePpm,
 		&i.PaidAt,
 		&i.PaymentVerificationID,
+		&i.CreditsInvoiceID,
 	)
 	return i, err
 }
 
 const getInvoiceByNumber = `-- name: GetInvoiceByNumber :one
-SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id FROM invoices WHERE company_id = $1 AND number = $2
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id, credits_invoice_id FROM invoices WHERE company_id = $1 AND number = $2
 `
 
 type GetInvoiceByNumberParams struct {
@@ -119,6 +137,7 @@ func (q *Queries) GetInvoiceByNumber(ctx context.Context, arg GetInvoiceByNumber
 		&i.RatePpm,
 		&i.PaidAt,
 		&i.PaymentVerificationID,
+		&i.CreditsInvoiceID,
 	)
 	return i, err
 }
@@ -126,7 +145,7 @@ func (q *Queries) GetInvoiceByNumber(ctx context.Context, arg GetInvoiceByNumber
 const insertInvoice = `-- name: InsertInvoice :one
 INSERT INTO invoices (company_id, counterparty_id, invoice_date, due_date, currency, rate_ppm, ocr, note_enc)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id
+RETURNING id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id, credits_invoice_id
 `
 
 type InsertInvoiceParams struct {
@@ -169,6 +188,7 @@ func (q *Queries) InsertInvoice(ctx context.Context, arg InsertInvoiceParams) (I
 		&i.RatePpm,
 		&i.PaidAt,
 		&i.PaymentVerificationID,
+		&i.CreditsInvoiceID,
 	)
 	return i, err
 }
@@ -232,7 +252,7 @@ func (q *Queries) ListInvoiceLines(ctx context.Context, invoiceID uuid.UUID) ([]
 }
 
 const listInvoices = `-- name: ListInvoices :many
-SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id FROM invoices WHERE company_id = $1 ORDER BY created_at
+SELECT id, company_id, counterparty_id, number, status, invoice_date, due_date, currency, ocr, note_enc, verification_id, created_at, finalized_at, rate_ppm, paid_at, payment_verification_id, credits_invoice_id FROM invoices WHERE company_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invoice, error) {
@@ -261,6 +281,7 @@ func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 			&i.RatePpm,
 			&i.PaidAt,
 			&i.PaymentVerificationID,
+			&i.CreditsInvoiceID,
 		); err != nil {
 			return nil, err
 		}
@@ -270,6 +291,23 @@ func (q *Queries) ListInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 		return nil, err
 	}
 	return items, nil
+}
+
+const markInvoiceCancelled = `-- name: MarkInvoiceCancelled :execrows
+UPDATE invoices SET status = 'cancelled' WHERE id = $1 AND company_id = $2 AND status = 'finalized'
+`
+
+type MarkInvoiceCancelledParams struct {
+	ID        uuid.UUID `json:"id"`
+	CompanyID uuid.UUID `json:"company_id"`
+}
+
+func (q *Queries) MarkInvoiceCancelled(ctx context.Context, arg MarkInvoiceCancelledParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markInvoiceCancelled, arg.ID, arg.CompanyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markInvoicePaid = `-- name: MarkInvoicePaid :execrows
@@ -296,4 +334,18 @@ func (q *Queries) MarkInvoicePaid(ctx context.Context, arg MarkInvoicePaidParams
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setInvoiceCredits = `-- name: SetInvoiceCredits :exec
+UPDATE invoices SET credits_invoice_id = $2 WHERE id = $1
+`
+
+type SetInvoiceCreditsParams struct {
+	ID               uuid.UUID   `json:"id"`
+	CreditsInvoiceID pgtype.UUID `json:"credits_invoice_id"`
+}
+
+func (q *Queries) SetInvoiceCredits(ctx context.Context, arg SetInvoiceCreditsParams) error {
+	_, err := q.db.Exec(ctx, setInvoiceCredits, arg.ID, arg.CreditsInvoiceID)
+	return err
 }
