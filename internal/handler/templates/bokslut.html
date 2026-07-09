@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1>Bokslut och räkenskapsår</h1>
+<p class="muted" style="max-width:620px">Stäng ett räkenskapsår när året är klart. Årets resultat bokförs till 2099 (Årets resultat) med en verifikation i serie O, och perioden låses. Resultat- och balansräkningen fungerar som vanligt efteråt. Den formella dispositionen (2099 till 2091 Balanserad vinst) beslutas på bolagsstämman och bokförs manuellt.</p>
+{{if .Data}}
+<table>
+  <tr><th>År</th><th>Period</th><th>Status</th><th></th></tr>
+  {{range .Data}}<tr>
+    <td>{{.Label}}</td>
+    <td>{{.StartsOn.Format "2006-01-02"}} till {{.EndsOn.Format "2006-01-02"}}</td>
+    <td>{{if .Closed}}<span class="pill paid">stängt</span>{{else}}<span class="pill finalized">öppet</span>{{end}}</td>
+    <td class="num">{{if not .Closed}}<form method="post" action="/bokslut/{{.ID}}/close" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small" type="submit">Stäng år (bokslut)</button></form>{{end}}</td>
+  </tr>{{end}}
+</table>
+{{else}}<div class="empty">Inga räkenskapsår än.</div>{{end}}
+
+<h2>Lägg till räkenskapsår</h2>
+<form method="post" action="/bokslut">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="row">
+    <div style="flex:0 0 160px"><label>År (kalenderår)</label><input name="year" type="number" placeholder="2027" required></div>
+    <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn secondary" type="submit">Lägg till</button></div>
+  </div>
+</form>
+{{end}}

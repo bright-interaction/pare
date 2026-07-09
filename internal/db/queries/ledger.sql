@@ -70,6 +70,16 @@ WHERE v.company_id = $1 AND v.vdate <= $2
 GROUP BY l.account
 ORDER BY l.account;
 
+-- name: TrialBalanceBetweenExclSeries :many
+-- Period balances excluding a voucher series (used for the resultaträkning so a
+-- closed year still shows its real P&L, not the zeroed post-close figures).
+SELECT l.account, SUM(l.debit_ore - l.credit_ore)::BIGINT AS net_ore
+FROM verification_lines l
+JOIN verifications v ON v.id = l.verification_id
+WHERE v.company_id = $1 AND v.vdate >= $2 AND v.vdate <= $3 AND v.series <> $4
+GROUP BY l.account
+ORDER BY l.account;
+
 -- name: InsertCounterparty :one
 INSERT INTO counterparties
     (company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc)

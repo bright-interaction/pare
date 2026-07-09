@@ -79,6 +79,7 @@ func (s *Server) register() {
 					},
 					"required": []string{"account"},
 				}},
+				"dry_run": map[string]any{"type": "boolean", "description": "if true, validate and preview only; nothing is committed"},
 			},
 			"required": []string{"series", "date", "lines"},
 		},
@@ -96,6 +97,7 @@ func (s *Server) register() {
 				"date":             map[string]any{"type": "string", "description": "payment date, YYYY-MM-DD"},
 				"received_sek_ore": map[string]any{"type": "integer", "description": "amount actually received, in öre (SEK). For a foreign-currency invoice this is the SEK that landed in the bank."},
 				"account":          map[string]any{"type": "string", "description": "bank account to debit; defaults to 1930"},
+				"dry_run":          map[string]any{"type": "boolean", "description": "if true, validate and preview only; nothing is committed"},
 			},
 			"required": []string{"invoice_number", "date", "received_sek_ore"},
 		},
@@ -212,12 +214,16 @@ type sieResult struct {
 type postResult struct {
 	VerificationID string `json:"verification_id"`
 	Ok             bool   `json:"ok"`
+	DryRun         bool   `json:"dry_run"`
+	Note           string `json:"note"`
 }
 
 type paymentResult struct {
 	VerificationID string `json:"verification_id"`
 	InvoiceNumber  string `json:"invoice_number"`
 	Ok             bool   `json:"ok"`
+	DryRun         bool   `json:"dry_run"`
+	Note           string `json:"note"`
 }
 
 type auditResult struct {
@@ -355,6 +361,7 @@ func runPostVerification(ctx context.Context, tc toolCtx, args json.RawMessage) 
 		Series      string `json:"series"`
 		Date        string `json:"date"`
 		Description string `json:"description"`
+		DryRun      bool   `json:"dry_run"`
 		Lines       []struct {
 			Account   string `json:"account"`
 			DebitOre  int64  `json:"debit_ore"`
@@ -383,6 +390,14 @@ func runPostVerification(ctx context.Context, tc toolCtx, args json.RawMessage) 
 	if err := checkCeiling(tc, debitTotal); err != nil {
 		return nil, err
 	}
+	if in.DryRun {
+		// Validate (balance + non-negative) without committing, so the assistant
+		// can propose and a human can then post it in the UI.
+		if err := (ledger.Verification{Series: in.Series, Date: date, Description: in.Description, Lines: lines}).Validate(); err != nil {
+			return nil, err
+		}
+		return &postResult{DryRun: true, Ok: false, Note: "Balanserad. Inget bokfördes (dry_run). Be en människa bekräfta i Pare."}, nil
+	}
 	verID, err := tc.store.PostVerification(ctx, tc.company, in.Series, date, in.Description, lines, uuid.Nil)
 	if err != nil {
 		return nil, err
@@ -396,6 +411,7 @@ func runRecordPayment(ctx context.Context, tc toolCtx, args json.RawMessage) (an
 		Date           string `json:"date"`
 		ReceivedSEKOre int64  `json:"received_sek_ore"`
 		Account        string `json:"account"`
+		DryRun         bool   `json:"dry_run"`
 	}
 	if err := json.Unmarshal(args, &in); err != nil {
 		return nil, errInvalidArgs
@@ -410,6 +426,9 @@ func runRecordPayment(ctx context.Context, tc toolCtx, args json.RawMessage) (an
 	}
 	if err := checkCeiling(tc, in.ReceivedSEKOre); err != nil {
 		return nil, err
+	}
+	if in.DryRun {
+		return &paymentResult{DryRun: true, Ok: false, InvoiceNumber: in.InvoiceNumber, Note: "Inget bokfördes (dry_run). Be en människa bekräfta betalningen i Pare."}, nil
 	}
 	verID, err := tc.store.RecordPaymentByNumber(ctx, tc.company, in.InvoiceNumber, date, account, ledger.Amount(in.ReceivedSEKOre))
 	if err != nil {
