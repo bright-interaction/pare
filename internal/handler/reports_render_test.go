@@ -65,6 +65,19 @@ func TestFormTemplatesRender(t *testing.T) {
 
 	renderOK(t, "sie_import", pageData{Title: "Importera SIE", Email: "op@x.se", CSRF: "tok"}, "Importera SIE", `name="csrf" value="tok"`)
 
+	renderOK(t, "dashboard", pageData{Title: "Översikt", Email: "op@x.se", Data: dashboardData{
+		Year: 2026, RevenueKr: "100 000,00", CostsKr: "40 000,00", ResultKr: "60 000,00",
+		CashKr: "50 000,00", ReceivablesKr: "12 500,00", PayablesKr: "3 000,00",
+		UnpaidCount: 2, UnpaidTotalKr: "12 500,00", OverdueCount: 1, OverdueTotal: "6 250,00",
+		MomsToPayKr: "8 000,00", Moms: moms.Declaration{},
+	}}, "Omsättning i år", "Likvida medel", "Förfallna fakturor")
+
+	renderOK(t, "reskontra", pageData{Title: "Reskontra", Email: "op@x.se", Data: reskontraData{
+		Buckets:   []agingBucket{{Label: "Ej förfallet", Count: 1, Total: ledger.SEK(12500, 0)}, {Label: "1-30 dagar"}, {Label: "31-60 dagar"}, {Label: "61+ dagar"}},
+		Customers: []custReskontraRow{{Number: "2026-0001", Customer: "Kund AB", DueDate: "2026-03-03", Outstanding: ledger.SEK(12500, 0), DaysOverdue: 5}},
+		Suppliers: []suppReskontraRow{{Supplier: "Anthropic PBC", Number: "INV-1", DueDate: "2026-03-31", Payable: ledger.SEK(10000, 0)}},
+	}}, "Kundreskontra", "Leverantörsreskontra", "Anthropic PBC")
+
 	renderOK(t, "bokslut", pageData{Title: "Bokslut", Email: "op@x.se", CSRF: "tok", Data: []store.FiscalYear{
 		{Label: "2026", StartsOn: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), EndsOn: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), Closed: false},
 	}}, "räkenskapsår", "Stäng år", "2026")

@@ -1,0 +1,38 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Reskontra</h1>
+
+<h2>Kundreskontra (att få in)</h2>
+<div class="cards">
+  {{range $d.Buckets}}<div class="card"><div class="k">{{.Label}}</div><div class="v">{{.Total}}</div><div class="muted">{{.Count}} faktura(or)</div></div>{{end}}
+</div>
+{{if $d.Customers}}
+<table style="margin-top:14px">
+  <tr><th>Nr</th><th>Kund</th><th>Förfaller</th><th class="num">Dagar sen</th><th class="num">Utestående</th><th></th></tr>
+  {{range $d.Customers}}<tr>
+    <td>{{.Number}}</td>
+    <td>{{.Customer}}</td>
+    <td>{{.DueDate}}</td>
+    <td class="num">{{if gt .DaysOverdue 0}}{{.DaysOverdue}}{{else}}-{{end}}</td>
+    <td class="num">{{.Outstanding}} kr</td>
+    <td class="num"><a class="btn small" href="/invoices?match={{.Outstanding}}">Betala</a></td>
+  </tr>{{end}}
+  <tr class="totalrow"><td colspan="4">Summa kundfordringar</td><td class="num">{{$d.ReceivablesTotal}} kr</td><td></td></tr>
+</table>
+{{else}}<p class="muted">Inga öppna kundfakturor.</p>{{end}}
+
+<h2>Leverantörsreskontra (att betala)</h2>
+{{if $d.Suppliers}}
+<table>
+  <tr><th>Leverantör</th><th>Fakturanr</th><th>Förfaller</th><th class="num">Att betala</th><th></th></tr>
+  {{range $d.Suppliers}}<tr>
+    <td>{{.Supplier}}</td>
+    <td>{{if .Number}}{{.Number}}{{else}}-{{end}}</td>
+    <td>{{.DueDate}}</td>
+    <td class="num">{{.Payable}} kr</td>
+    <td class="num"><a class="btn small secondary" href="/supplier-invoices">Öppna</a></td>
+  </tr>{{end}}
+  <tr class="totalrow"><td colspan="3">Summa leverantörsskulder</td><td class="num">{{$d.PayablesTotal}} kr</td><td></td></tr>
+</table>
+{{else}}<p class="muted">Inga öppna leverantörsfakturor.</p>{{end}}
+{{end}}

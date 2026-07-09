@@ -179,43 +179,90 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 // --- app pages ---
 
+type dashboardData struct {
+	Year          int
+	RevenueKr     string
+	CostsKr       string
+	ResultKr      string
+	CashKr        string
+	ReceivablesKr string
+	PayablesKr    string
+	UnpaidCount   int
+	UnpaidTotalKr string
+	OverdueCount  int
+	OverdueTotal  string
+	MomsToPayKr   string
+	OutputVatKr   string
+	InputVatKr    string
+	Moms          moms.Declaration
+}
+
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	co, ctx := companyID(r), r.Context()
-	tb, err := s.Store.TrialBalance(ctx, co)
+	now := time.Now()
+	yearStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// Result / revenue / costs / moms over the fiscal year to date (excluding the
+	// year-end close series). Balance-sheet figures as of today.
+	periodTB, err := s.Store.TrialBalanceBetweenExclSeries(ctx, co, yearStart, now, "O")
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
-	bal := make(map[string]ledger.Amount, len(tb))
-	var result ledger.Amount
-	for _, row := range tb {
-		bal[row.Account] = row.Net
-		if row.Class.IsResult() {
-			result += row.Net
+	asOfTB, err := s.Store.TrialBalanceAsOf(ctx, co, now)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	stmts := ledger.BuildStatementsPeriod(periodTB, asOfTB, nil)
+	periodBal := make(map[string]ledger.Amount, len(periodTB))
+	for _, r := range periodTB {
+		periodBal[r.Account] = r.Net
+	}
+	d := moms.Report(periodBal)
+
+	var cash, receivables, payables ledger.Amount
+	for _, r := range asOfTB {
+		switch {
+		case strings.HasPrefix(r.Account, "19"): // kassa/bank
+			cash += r.Net
+		case r.Account == "1510": // kundfordringar
+			receivables += r.Net
+		case r.Account == "2440": // leverantörsskulder (credit-positive)
+			payables += -r.Net
 		}
 	}
-	d := moms.Report(bal)
-	unpaid, _ := s.Store.UnpaidInvoices(ctx, co)
-	var ut ledger.Amount
+
+	unpaid, _ := s.Store.ListInvoiceSummaries(ctx, co)
+	var unpaidCount, overdueCount int
+	var unpaidTotal, overdueTotal ledger.Amount
 	for _, u := range unpaid {
-		ut += u.TotalSEK
+		if u.Status == "finalized" && !u.IsCredit {
+			unpaidCount++
+			unpaidTotal += u.TotalSEK - u.AmountPaid
+			if u.Overdue {
+				overdueCount++
+				overdueTotal += u.TotalSEK - u.AmountPaid
+			}
+		}
 	}
+
 	pd := s.base(r, "Översikt")
-	pd.Data = struct {
-		ResultKr      string
-		MomsToPayKr   string
-		OutputVatKr   string
-		InputVatKr    string
-		UnpaidCount   int
-		UnpaidTotalKr string
-		Moms          moms.Declaration
-	}{
-		ResultKr:      (-result).String(),
+	pd.Data = dashboardData{
+		Year:          now.Year(),
+		RevenueKr:     stmts.IncomeTotal.String(),
+		CostsKr:       (stmts.ExpenseTotal - stmts.FinancialTotal).String(),
+		ResultKr:      stmts.Result.String(),
+		CashKr:        cash.String(),
+		ReceivablesKr: receivables.String(),
+		PayablesKr:    payables.String(),
+		UnpaidCount:   unpaidCount,
+		UnpaidTotalKr: unpaidTotal.String(),
+		OverdueCount:  overdueCount,
+		OverdueTotal:  overdueTotal.String(),
 		MomsToPayKr:   d.Box49.String(),
 		OutputVatKr:   (d.Box10 + d.Box11 + d.Box12).String(),
 		InputVatKr:    d.Box48.String(),
-		UnpaidCount:   len(unpaid),
-		UnpaidTotalKr: ut.String(),
 		Moms:          d,
 	}
 	render(w, "dashboard", pd, http.StatusOK)
@@ -411,14 +458,35 @@ func (s *Server) handleAddCounterparty(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/counterparties", http.StatusSeeOther)
 }
 
+type invoicesData struct {
+	Invoices   []store.InvoiceSummary
+	MatchInput string
+	MatchCount int
+}
+
 func (s *Server) handleInvoices(w http.ResponseWriter, r *http.Request) {
 	inv, err := s.Store.ListInvoiceSummaries(r.Context(), companyID(r))
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	data := invoicesData{}
+	// Smart reconciliation: ?match=<kr> highlights open invoices whose
+	// outstanding balance equals an incoming payment.
+	if m := strings.TrimSpace(r.URL.Query().Get("match")); m != "" {
+		data.MatchInput = m
+		amount := parseKrOre(m)
+		for i := range inv {
+			it := &inv[i]
+			if it.Status == "finalized" && !it.IsCredit && it.TotalSEK-it.AmountPaid == amount {
+				it.Matched = true
+				data.MatchCount++
+			}
+		}
+	}
+	data.Invoices = inv
 	pd := s.base(r, "Fakturor")
-	pd.Data = inv
+	pd.Data = data
 	render(w, "invoices", pd, http.StatusOK)
 }
 
@@ -804,6 +872,102 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 		To:         to.Format("2006-01-02"),
 	}
 	render(w, "reports", pd, http.StatusOK)
+}
+
+type agingBucket struct {
+	Label string
+	Count int
+	Total ledger.Amount
+}
+
+type custReskontraRow struct {
+	Number      string
+	Customer    string
+	DueDate     string
+	Outstanding ledger.Amount
+	DaysOverdue int
+}
+
+type suppReskontraRow struct {
+	Supplier string
+	Number   string
+	DueDate  string
+	Payable  ledger.Amount
+}
+
+type reskontraData struct {
+	Buckets          []agingBucket
+	Customers        []custReskontraRow
+	Suppliers        []suppReskontraRow
+	ReceivablesTotal ledger.Amount
+	PayablesTotal    ledger.Amount
+}
+
+// handleReskontra shows the kundreskontra (open customer invoices, aged) and
+// leverantörsreskontra (open supplier invoices).
+func (s *Server) handleReskontra(w http.ResponseWriter, r *http.Request) {
+	co, ctx := companyID(r), r.Context()
+	now := time.Now().Truncate(24 * time.Hour)
+
+	invs, err := s.Store.ListInvoiceSummaries(ctx, co)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	buckets := []agingBucket{{Label: "Ej förfallet"}, {Label: "1-30 dagar"}, {Label: "31-60 dagar"}, {Label: "61+ dagar"}}
+	var custRows []custReskontraRow
+	var recTotal ledger.Amount
+	for _, inv := range invs {
+		if inv.Status != "finalized" || inv.IsCredit {
+			continue
+		}
+		out := inv.TotalSEK - inv.AmountPaid
+		if out <= 0 {
+			continue
+		}
+		recTotal += out
+		days := 0
+		if due, e := time.Parse("2006-01-02", inv.DueDate); e == nil {
+			days = int(now.Sub(due).Hours() / 24)
+		}
+		bi := 0
+		switch {
+		case days <= 0:
+			bi = 0
+		case days <= 30:
+			bi = 1
+		case days <= 60:
+			bi = 2
+		default:
+			bi = 3
+		}
+		buckets[bi].Count++
+		buckets[bi].Total += out
+		custRows = append(custRows, custReskontraRow{Number: inv.Number, Customer: inv.CustomerName, DueDate: inv.DueDate, Outstanding: out, DaysOverdue: max(0, days)})
+	}
+
+	sups, err := s.Store.ListSupplierInvoiceViews(ctx, co)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	var suppRows []suppReskontraRow
+	var payTotal ledger.Amount
+	for _, sv := range sups {
+		if sv.Status != "finalized" {
+			continue
+		}
+		payTotal += sv.Payable
+		due := ""
+		if !sv.DueDate.IsZero() {
+			due = sv.DueDate.Format("2006-01-02")
+		}
+		suppRows = append(suppRows, suppReskontraRow{Supplier: sv.SupplierName, Number: sv.SupplierNumber, DueDate: due, Payable: sv.Payable})
+	}
+
+	pd := s.base(r, "Reskontra")
+	pd.Data = reskontraData{Buckets: buckets, Customers: custRows, Suppliers: suppRows, ReceivablesTotal: recTotal, PayablesTotal: payTotal}
+	render(w, "reskontra", pd, http.StatusOK)
 }
 
 func (s *Server) handleSIE(w http.ResponseWriter, r *http.Request) {

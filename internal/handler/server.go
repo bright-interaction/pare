@@ -100,6 +100,7 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/verifications", s.handlePostVerification)
 				r.Post("/verifications/{id}/undo", s.handleUndo)
 				r.Get("/reports", s.handleReports)
+				r.Get("/reskontra", s.handleReskontra)
 				r.Get("/bokslut", s.handleFiscalYears)
 				r.Post("/bokslut", s.handleAddFiscalYear)
 				r.Post("/bokslut/{id}/close", s.handleCloseFiscalYear)
