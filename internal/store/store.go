@@ -62,7 +62,7 @@ func (s *Store) BootstrapCompany(ctx context.Context, name, orgnr string) (uuid.
 	if err != nil {
 		return uuid.Nil, err
 	}
-	co, err := s.q.InsertCompany(ctx, gen.InsertCompanyParams{Name: name, Orgnr: orgnr, DekWrapped: wrapped})
+	co, err := s.q.InsertCompany(ctx, gen.InsertCompanyParams{Name: name, Orgnr: orgnr, DekWrapped: wrapped, KeyID: s.kek.Fingerprint()})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("store: insert company: %w", err)
 	}

@@ -1,0 +1,16 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Betala leverantörsfaktura</h1>
+<p class="muted">{{$d.CustomerName}}{{if $d.Number}} · faktura {{$d.Number}}{{end}} · {{$d.Total}} SEK</p>
+<form method="post" action="/supplier-invoices/{{$d.ID}}/pay">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="row">
+    <div><label>Betaldatum</label><input name="date" type="date" required></div>
+    <div><label>Belopp (SEK)</label><input name="amount" type="number" step="0.01" value="{{$d.TotalSEKInput}}" required></div>
+    <div><label>Från konto</label>
+      <select name="account">{{range $d.BankAccounts}}<option value="{{.Number}}">{{.Number}} {{.Name}}</option>{{end}}</select>
+    </div>
+  </div>
+  <div style="margin-top:16px"><button class="btn" type="submit">Registrera betalning</button> <a class="btn secondary" href="/supplier-invoices">Avbryt</a></div>
+</form>
+{{end}}

@@ -37,12 +37,15 @@ func TestInvoiceFinalizeAndSIE(t *testing.T) {
 		t.Fatalf("create invoice: %v", err)
 	}
 
-	verID, err := s.FinalizeInvoice(ctx, co, invID, "2026-0001", day("2026-02-01"), day("2026-03-03"))
+	verID, number, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03"))
 	if err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 	if verID.String() == "" {
 		t.Fatal("no verification id")
+	}
+	if number != "2026-0001" {
+		t.Fatalf("first invoice number = %q, want 2026-0001", number)
 	}
 
 	// books still balance after auto-posting the invoice verifikat
@@ -59,7 +62,7 @@ func TestInvoiceFinalizeAndSIE(t *testing.T) {
 	}
 
 	// re-finalizing a non-draft is refused
-	if _, err := s.FinalizeInvoice(ctx, co, invID, "2026-0002", day("2026-02-01"), day("2026-03-03")); err != ErrNotDraft {
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != ErrNotDraft {
 		t.Fatalf("want ErrNotDraft, got %v", err)
 	}
 
@@ -87,6 +90,39 @@ func TestInvoiceFinalizeAndSIE(t *testing.T) {
 	}
 }
 
+// Invoice numbers are gap-free and per fiscal year: sequential within a year and
+// reset to 0001 at the year boundary (the old full-table count kept climbing).
+func TestInvoiceNumberingPerYear(t *testing.T) {
+	s, pool := testStore(t)
+	defer pool.Close()
+	ctx := context.Background()
+	co, _ := s.BootstrapCompany(ctx, "BI AB", "556000-0000")
+	cust, _ := s.CreateCounterparty(ctx, co, Counterparty{Kind: "customer", Name: "Kund AB", OrgNr: "556100-2222"})
+
+	mk := func(d string) string {
+		id, _ := s.CreateInvoice(ctx, co, cust, invoice.Invoice{Lines: []invoice.Line{
+			{Description: "x", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(100, 0), VATCode: moms.SE25},
+		}})
+		_, num, err := s.FinalizeInvoice(ctx, co, id, day(d), day(d))
+		if err != nil {
+			t.Fatalf("finalize %s: %v", d, err)
+		}
+		return num
+	}
+	if got := mk("2026-03-01"); got != "2026-0001" {
+		t.Fatalf("first 2026 = %q", got)
+	}
+	if got := mk("2026-06-01"); got != "2026-0002" {
+		t.Fatalf("second 2026 = %q", got)
+	}
+	if got := mk("2027-01-10"); got != "2027-0001" {
+		t.Fatalf("first 2027 should reset to 0001, got %q", got)
+	}
+	if got := mk("2027-02-10"); got != "2027-0002" {
+		t.Fatalf("second 2027 = %q", got)
+	}
+}
+
 func TestInvoicePDF(t *testing.T) {
 	url := os.Getenv("PARE_TEST_GOTENBERG_URL")
 	if url == "" {
@@ -101,7 +137,7 @@ func TestInvoicePDF(t *testing.T) {
 	invID, _ := s.CreateInvoice(ctx, co, cust, invoice.Invoice{Lines: []invoice.Line{
 		{Description: "Konsultarvode", QuantityMilli: 5000, UnitPriceOre: ledger.SEK(1500, 0), VATCode: moms.SE25},
 	}})
-	if _, err := s.FinalizeInvoice(ctx, co, invID, "2026-0001", day("2026-02-01"), day("2026-03-03")); err != nil {
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 

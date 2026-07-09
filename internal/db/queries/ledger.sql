@@ -1,10 +1,16 @@
 -- name: InsertCompany :one
-INSERT INTO companies (name, orgnr, dek_wrapped)
-VALUES ($1, $2, $3)
+INSERT INTO companies (name, orgnr, dek_wrapped, key_id, key_version)
+VALUES ($1, $2, $3, $4, 1)
 RETURNING *;
 
 -- name: GetCompany :one
 SELECT * FROM companies WHERE id = $1;
+
+-- name: UpdateCompanyProfile :exec
+UPDATE companies
+SET name = $2, orgnr = $3, momsregnr = $4, address = $5, postal_code = $6,
+    city = $7, bankgiro = $8, iban = $9, fskatt = $10
+WHERE id = $1;
 
 -- name: ListCompanies :many
 SELECT * FROM companies ORDER BY created_at;

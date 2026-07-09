@@ -48,7 +48,7 @@ func (q *Queries) EraseCounterparty(ctx context.Context, arg EraseCounterpartyPa
 }
 
 const getCompany = `-- name: GetCompany :one
-SELECT id, name, orgnr, dek_wrapped, created_at, locked_through FROM companies WHERE id = $1
+SELECT id, name, orgnr, dek_wrapped, created_at, locked_through, momsregnr, address, postal_code, city, bankgiro, iban, fskatt, key_id, key_version FROM companies WHERE id = $1
 `
 
 func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error) {
@@ -61,6 +61,15 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 		&i.DekWrapped,
 		&i.CreatedAt,
 		&i.LockedThrough,
+		&i.Momsregnr,
+		&i.Address,
+		&i.PostalCode,
+		&i.City,
+		&i.Bankgiro,
+		&i.Iban,
+		&i.Fskatt,
+		&i.KeyID,
+		&i.KeyVersion,
 	)
 	return i, err
 }
@@ -88,19 +97,25 @@ func (q *Queries) GetCounterparty(ctx context.Context, id uuid.UUID) (Counterpar
 }
 
 const insertCompany = `-- name: InsertCompany :one
-INSERT INTO companies (name, orgnr, dek_wrapped)
-VALUES ($1, $2, $3)
-RETURNING id, name, orgnr, dek_wrapped, created_at, locked_through
+INSERT INTO companies (name, orgnr, dek_wrapped, key_id, key_version)
+VALUES ($1, $2, $3, $4, 1)
+RETURNING id, name, orgnr, dek_wrapped, created_at, locked_through, momsregnr, address, postal_code, city, bankgiro, iban, fskatt, key_id, key_version
 `
 
 type InsertCompanyParams struct {
 	Name       string `json:"name"`
 	Orgnr      string `json:"orgnr"`
 	DekWrapped string `json:"dek_wrapped"`
+	KeyID      string `json:"key_id"`
 }
 
 func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (Company, error) {
-	row := q.db.QueryRow(ctx, insertCompany, arg.Name, arg.Orgnr, arg.DekWrapped)
+	row := q.db.QueryRow(ctx, insertCompany,
+		arg.Name,
+		arg.Orgnr,
+		arg.DekWrapped,
+		arg.KeyID,
+	)
 	var i Company
 	err := row.Scan(
 		&i.ID,
@@ -109,6 +124,15 @@ func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (C
 		&i.DekWrapped,
 		&i.CreatedAt,
 		&i.LockedThrough,
+		&i.Momsregnr,
+		&i.Address,
+		&i.PostalCode,
+		&i.City,
+		&i.Bankgiro,
+		&i.Iban,
+		&i.Fskatt,
+		&i.KeyID,
+		&i.KeyVersion,
 	)
 	return i, err
 }
@@ -252,7 +276,7 @@ func (q *Queries) ListAccounts(ctx context.Context, companyID uuid.UUID) ([]Acco
 }
 
 const listCompanies = `-- name: ListCompanies :many
-SELECT id, name, orgnr, dek_wrapped, created_at, locked_through FROM companies ORDER BY created_at
+SELECT id, name, orgnr, dek_wrapped, created_at, locked_through, momsregnr, address, postal_code, city, bankgiro, iban, fskatt, key_id, key_version FROM companies ORDER BY created_at
 `
 
 func (q *Queries) ListCompanies(ctx context.Context) ([]Company, error) {
@@ -271,6 +295,15 @@ func (q *Queries) ListCompanies(ctx context.Context) ([]Company, error) {
 			&i.DekWrapped,
 			&i.CreatedAt,
 			&i.LockedThrough,
+			&i.Momsregnr,
+			&i.Address,
+			&i.PostalCode,
+			&i.City,
+			&i.Bankgiro,
+			&i.Iban,
+			&i.Fskatt,
+			&i.KeyID,
+			&i.KeyVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -441,6 +474,42 @@ func (q *Queries) TrialBalance(ctx context.Context, companyID uuid.UUID) ([]Tria
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCompanyProfile = `-- name: UpdateCompanyProfile :exec
+UPDATE companies
+SET name = $2, orgnr = $3, momsregnr = $4, address = $5, postal_code = $6,
+    city = $7, bankgiro = $8, iban = $9, fskatt = $10
+WHERE id = $1
+`
+
+type UpdateCompanyProfileParams struct {
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	Orgnr      string    `json:"orgnr"`
+	Momsregnr  string    `json:"momsregnr"`
+	Address    string    `json:"address"`
+	PostalCode string    `json:"postal_code"`
+	City       string    `json:"city"`
+	Bankgiro   string    `json:"bankgiro"`
+	Iban       string    `json:"iban"`
+	Fskatt     bool      `json:"fskatt"`
+}
+
+func (q *Queries) UpdateCompanyProfile(ctx context.Context, arg UpdateCompanyProfileParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyProfile,
+		arg.ID,
+		arg.Name,
+		arg.Orgnr,
+		arg.Momsregnr,
+		arg.Address,
+		arg.PostalCode,
+		arg.City,
+		arg.Bankgiro,
+		arg.Iban,
+		arg.Fskatt,
+	)
+	return err
 }
 
 const updateCounterparty = `-- name: UpdateCounterparty :exec

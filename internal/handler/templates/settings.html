@@ -1,0 +1,24 @@
+{{define "content"}}
+{{$c := .Data}}
+<h1>Företagsuppgifter</h1>
+<p class="muted" style="max-width:560px">Dessa uppgifter skrivs ut på fakturan. Momsregistreringsnummer och betalningsmottagare krävs för en giltig faktura enligt mervärdesskattelagen.</p>
+<form method="post" action="/settings">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="row">
+    <div><label>Företagsnamn</label><input name="name" value="{{$c.Name}}" required></div>
+    <div><label>Organisationsnummer</label><input name="orgnr" value="{{$c.OrgNr}}" placeholder="556000-0000"></div>
+  </div>
+  <label>Momsregistreringsnummer</label><input name="momsregnr" value="{{$c.MomsRegNr}}" placeholder="SE556000000001">
+  <label>Adress</label><input name="address" value="{{$c.Address}}" placeholder="Gatan 1">
+  <div class="row">
+    <div style="flex:0 0 130px"><label>Postnummer</label><input name="postal_code" value="{{$c.PostalCode}}" placeholder="111 22"></div>
+    <div><label>Ort</label><input name="city" value="{{$c.City}}" placeholder="Stockholm"></div>
+  </div>
+  <div class="row">
+    <div><label>Bankgiro</label><input name="bankgiro" value="{{$c.Bankgiro}}" placeholder="123-4567"></div>
+    <div><label>IBAN</label><input name="iban" value="{{$c.IBAN}}" placeholder="SE..."></div>
+  </div>
+  <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:12px"><input type="checkbox" name="fskatt" value="1" style="width:auto" {{if $c.FSkatt}}checked{{end}}> Godkänd för F-skatt</label>
+  <div style="margin-top:16px"><button class="btn" type="submit">Spara</button></div>
+</form>
+{{end}}

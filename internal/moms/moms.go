@@ -43,6 +43,55 @@ func (c Code) Rate() Rate {
 	}
 }
 
+// Label is the VAT-summary label for a code (per-rate breakout on the faktura).
+func (c Code) Label() string {
+	switch c {
+	case SE25:
+		return "Moms 25 %"
+	case SE12:
+		return "Moms 12 %"
+	case SE06:
+		return "Moms 6 %"
+	case RCEU:
+		return "Omvänd skattskyldighet"
+	case EXP:
+		return "Export (utanför EU)"
+	default:
+		return string(c)
+	}
+}
+
+// LineLabel is the short per-line VAT-column label.
+func (c Code) LineLabel() string {
+	switch c {
+	case RCEU:
+		return "Omvänd"
+	case EXP:
+		return "Export"
+	case SE25:
+		return "25 %"
+	case SE12:
+		return "12 %"
+	case SE06:
+		return "6 %"
+	default:
+		return "0 %"
+	}
+}
+
+// LegalNote is the mandatory invoice reference for a special VAT treatment (ML /
+// EU VAT Dir art. 226), or "" for a plain domestic line.
+func (c Code) LegalNote() string {
+	switch c {
+	case RCEU:
+		return "Omvänd betalningsskyldighet. Reverse charge. Köparen redovisar moms (artikel 196, mervärdesskattedirektivet 2006/112/EG)."
+	case EXP:
+		return "Omsättning av tjänst utanför EU, ingen svensk moms."
+	default:
+		return ""
+	}
+}
+
 // VAT returns the output VAT in öre for a net amount at a rate, rounded to the
 // nearest öre (half away from zero).
 func VAT(net ledger.Amount, rate Rate) ledger.Amount {
@@ -106,7 +155,12 @@ type Declaration struct {
 	Box10 ledger.Amount // output VAT 25%
 	Box11 ledger.Amount // output VAT 12%
 	Box12 ledger.Amount // output VAT 6%
-	Box30 ledger.Amount // self-assessed output 25% (reverse-charge acquisitions)
+	Box20 ledger.Amount // net purchases of goods from another EU country
+	Box21 ledger.Amount // net purchases of services from another EU country
+	Box22 ledger.Amount // net purchases of services from outside the EU
+	Box30 ledger.Amount // self-assessed output 25% on acquisitions above (rutor 20-22)
+	Box31 ledger.Amount // self-assessed output 12%
+	Box32 ledger.Amount // self-assessed output 6%
 	Box39 ledger.Amount // EU B2B services sold (net); needs periodisk sammanställning
 	Box48 ledger.Amount // deductible input VAT
 	Box49 ledger.Amount // net to pay (positive) or reclaim (negative)
@@ -114,7 +168,8 @@ type Declaration struct {
 
 // Report derives the declaration boxes from account net balances (debit-positive
 // öre, as ledger.Balances / store.TrialBalance produce). Output and sales
-// accounts carry credit balances, so they are negated to positive figures.
+// accounts carry credit balances, so they are negated to positive figures;
+// purchase accounts carry debit balances, read directly.
 func Report(bal map[string]ledger.Amount) Declaration {
 	cr := func(acc string) ledger.Amount { return -bal[acc] }
 	dr := func(acc string) ledger.Amount { return bal[acc] }
@@ -122,11 +177,13 @@ func Report(bal map[string]ledger.Amount) Declaration {
 		Box10: cr("2611"),
 		Box11: cr("2621"),
 		Box12: cr("2631"),
-		Box30: cr("2614"),
+		Box21: dr("4535"), // EU services acquired (reverse charge)
+		Box22: dr("4531"), // non-EU services acquired (reverse charge)
+		Box30: cr("2614") + cr("2615"),
 		Box05: cr("3001") + cr("3002") + cr("3003"),
 		Box39: cr("3308"),
 		Box48: dr("2640") + dr("2641") + dr("2645"),
 	}
-	d.Box49 = d.Box10 + d.Box11 + d.Box12 + d.Box30 - d.Box48
+	d.Box49 = d.Box10 + d.Box11 + d.Box12 + d.Box30 + d.Box31 + d.Box32 - d.Box48
 	return d
 }

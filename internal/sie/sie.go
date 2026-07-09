@@ -48,6 +48,13 @@ type Voucher struct {
 	Lines  []Line
 }
 
+// Balance is one #IB / #UB row: an account's opening or closing balance for a
+// fiscal year. Amount is signed öre (debit positive, credit negative).
+type Balance struct {
+	Account string
+	Amount  int64
+}
+
 // Export is everything needed to write (or the result of reading) a SIE 4 file.
 type Export struct {
 	CompanyName string
@@ -57,6 +64,10 @@ type Export struct {
 	Generated   time.Time
 	Accounts    []Account
 	Vouchers    []Voucher
+	// OpeningBalances (#IB, year 0) seed the ledger on import; ClosingBalances
+	// (#UB, year 0) let an import verify it reconstructed the same position.
+	OpeningBalances []Balance
+	ClosingBalances []Balance
 }
 
 // Balances checks that every voucher's transaction amounts sum to zero.
@@ -149,6 +160,15 @@ func Parse(r io.Reader) (Export, error) {
 		case "#KONTO":
 			if len(toks) > 2 {
 				e.Accounts = append(e.Accounts, Account{Number: toks[1], Name: toks[2]})
+			}
+		case "#IB":
+			// #IB {yearIndex} {account} {balance}; year 0 is the current year.
+			if len(toks) > 3 && toks[1] == "0" {
+				e.OpeningBalances = append(e.OpeningBalances, Balance{Account: toks[2], Amount: parseAmount(toks[3])})
+			}
+		case "#UB":
+			if len(toks) > 3 && toks[1] == "0" {
+				e.ClosingBalances = append(e.ClosingBalances, Balance{Account: toks[2], Amount: parseAmount(toks[3])})
 			}
 		case "#VER":
 			v := Voucher{}

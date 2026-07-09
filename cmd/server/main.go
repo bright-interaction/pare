@@ -19,6 +19,7 @@ import (
 	"github.com/brightinteraction/pare/internal/crypto"
 	"github.com/brightinteraction/pare/internal/db"
 	gen "github.com/brightinteraction/pare/internal/db/generated"
+	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/handler"
 	"github.com/brightinteraction/pare/internal/mcp"
 	"github.com/brightinteraction/pare/internal/render"
@@ -32,6 +33,15 @@ func main() {
 		os.Exit(1)
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level(cfg.LogLevel)})))
+
+	// Error reporting to the house Flare instance (no-op unless FLARE_DSN is set,
+	// which the Hephaestus deploy step injects).
+	release := os.Getenv("PARE_RELEASE")
+	if release == "" {
+		release = "dev"
+	}
+	flarereport.InitFlare("pare", release)
+	defer flarereport.Flush()
 
 	if cfg.DatabaseURL == "" {
 		slog.Error("PARE_DATABASE_URL is required")

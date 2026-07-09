@@ -5,9 +5,11 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
+	gen "github.com/brightinteraction/pare/internal/db/generated"
 	"github.com/brightinteraction/pare/internal/ledger"
 )
 
@@ -24,20 +26,48 @@ func (s *Store) ChartAccounts(ctx context.Context, companyID uuid.UUID) ([]ledge
 	return out, nil
 }
 
-// CompanyInfo is the operator's own company (name + org number).
+// CompanyInfo is the operator's own company: identity + the seller profile
+// printed on invoices (VAT number, address, payee account, F-skatt status).
 type CompanyInfo struct {
-	ID    uuid.UUID
-	Name  string
-	OrgNr string
+	ID         uuid.UUID
+	Name       string
+	OrgNr      string
+	MomsRegNr  string
+	Address    string
+	PostalCode string
+	City       string
+	Bankgiro   string
+	IBAN       string
+	FSkatt     bool
 }
 
-// Company returns the company header.
+// Company returns the company header + seller profile.
 func (s *Store) Company(ctx context.Context, companyID uuid.UUID) (CompanyInfo, error) {
 	co, err := s.q.GetCompany(ctx, companyID)
 	if err != nil {
 		return CompanyInfo{}, err
 	}
-	return CompanyInfo{ID: co.ID, Name: co.Name, OrgNr: co.Orgnr}, nil
+	return CompanyInfo{
+		ID: co.ID, Name: co.Name, OrgNr: co.Orgnr,
+		MomsRegNr: co.Momsregnr, Address: co.Address, PostalCode: co.PostalCode,
+		City: co.City, Bankgiro: co.Bankgiro, IBAN: co.Iban, FSkatt: co.Fskatt,
+	}, nil
+}
+
+// UpdateCompanyProfile saves the editable seller profile (name/orgnr + invoice
+// fields). Audit-logged.
+func (s *Store) UpdateCompanyProfile(ctx context.Context, ci CompanyInfo) error {
+	if ci.Name == "" {
+		return errors.New("store: company name required")
+	}
+	if err := s.q.UpdateCompanyProfile(ctx, gen.UpdateCompanyProfileParams{
+		ID: ci.ID, Name: ci.Name, Orgnr: ci.OrgNr, Momsregnr: ci.MomsRegNr,
+		Address: ci.Address, PostalCode: ci.PostalCode, City: ci.City,
+		Bankgiro: ci.Bankgiro, Iban: ci.IBAN, Fskatt: ci.FSkatt,
+	}); err != nil {
+		return err
+	}
+	return s.logAudit(ctx, s.q, ci.ID, "update_company_profile", "company", ci.ID.String(), ci.Name)
 }
 
 // ListCounterparties returns all counterparties with identities decrypted (for

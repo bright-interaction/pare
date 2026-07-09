@@ -43,6 +43,26 @@ func TestFormTemplatesRender(t *testing.T) {
 		Kind: "supplier", Name: "Leverantör AB", OrgNr: "556000-0000",
 		Personnummer: "", Address: "Gatan 1", IBAN: "SE35",
 	}}, "Radera personuppgifter", `name="csrf" value="tok"`, "Leverantör AB")
+
+	renderOK(t, "settings", pageData{Title: "Företag", Email: "op@x.se", CSRF: "tok", Data: store.CompanyInfo{
+		Name: "BI AB", OrgNr: "556000-0000", MomsRegNr: "SE556000000001", Bankgiro: "123-4567", FSkatt: true,
+	}}, "Företagsuppgifter", `value="SE556000000001"`)
+
+	renderOK(t, "supplier_invoices", pageData{Title: "Kostnader", Email: "op@x.se", CSRF: "tok", Data: []store.SupplierInvoiceView{
+		{ID: [16]byte{1}, SupplierName: "Anthropic PBC", SupplierNumber: "INV-1", VATLabel: "Tjänst utanför EU, omvänd moms", Payable: ledger.SEK(10000, 0), Status: "finalized"},
+	}}, "Kostnader", "Anthropic PBC", "Betala")
+
+	renderOK(t, "supplier_invoice_new", pageData{Title: "Ny", Email: "op@x.se", CSRF: "tok", Data: supplierNewData{
+		Suppliers:    []store.Counterparty{{Name: "Anthropic PBC"}},
+		CostAccounts: []ledger.Account{{Number: "6540", Name: "IT-tjänster"}},
+	}}, "Momsbehandling", "omvänd moms")
+
+	renderOK(t, "supplier_pay", pageData{Title: "Betala", Email: "op@x.se", CSRF: "tok", Data: payData{
+		ID: "abc", Number: "INV-1", CustomerName: "Anthropic PBC", Total: ledger.SEK(10000, 0),
+		Currency: "SEK", TotalSEKInput: "10000.00", BankAccounts: []ledger.Account{{Number: "1930", Name: "Bank"}},
+	}}, "Betala leverantörsfaktura", `value="tok"`)
+
+	renderOK(t, "sie_import", pageData{Title: "Importera SIE", Email: "op@x.se", CSRF: "tok"}, "Importera SIE", `name="csrf" value="tok"`)
 }
 
 // The reports template references many nested Statements/Declaration fields;

@@ -58,10 +58,12 @@
   <nav>
     <a href="/dashboard">Översikt</a>
     <a href="/invoices">Fakturor</a>
+    <a href="/supplier-invoices">Kostnader</a>
     <a href="/verifications">Verifikat</a>
     <a href="/counterparties">Kunder</a>
     <a href="/reports">Rapporter</a>
     <a href="/logg">Logg</a>
+    <a href="/settings">Företag</a>
   </nav>
   <div class="who">{{.CompanyName}} · {{.Email}}
     <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Logga ut</button></form>

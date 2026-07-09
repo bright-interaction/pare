@@ -1,0 +1,24 @@
+{{define "content"}}
+<div class="toolbar"><h1 style="margin:0">Kostnader (leverantörsfakturor)</h1><a class="btn" href="/supplier-invoices/new">Ny leverantörsfaktura</a></div>
+{{if .Data}}
+<table>
+  <tr><th>Leverantör</th><th>Fakturanr</th><th>Förfaller</th><th>Moms</th><th class="num">Att betala</th><th>Status</th><th></th></tr>
+  {{range .Data}}<tr>
+    <td>{{.SupplierName}}</td>
+    <td>{{if .SupplierNumber}}{{.SupplierNumber}}{{else}}<span class="muted">-</span>{{end}}</td>
+    <td>{{if not .DueDate.IsZero}}{{.DueDate.Format "2006-01-02"}}{{end}}</td>
+    <td class="muted">{{.VATLabel}}</td>
+    <td class="num">{{.Payable}} SEK</td>
+    <td><span class="pill {{.Status}}">{{.Status}}</span></td>
+    <td class="num">
+      {{if eq .Status "draft"}}
+        <form method="post" action="/supplier-invoices/{{.ID}}/finalize" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small" type="submit">Bokför</button></form>
+      {{else if eq .Status "finalized"}}
+        <a class="btn small" href="/supplier-invoices/{{.ID}}/pay">Betala</a>
+      {{end}}
+    </td>
+  </tr>{{end}}
+</table>
+<p class="muted" style="margin-top:10px;max-width:640px">Vid köp av tjänst från utlandet (t.ex. Anthropic, EU-hosting) beräknas förvärvsmoms automatiskt: utgående moms bokförs på 2614 och lika stor ingående moms på 2645, så nettot i momsdeklarationen blir noll medan inköpet redovisas i ruta 21 (EU) eller 22 (utanför EU).</p>
+{{else}}<div class="empty">Inga leverantörsfakturor än. <a href="/supplier-invoices/new">Skapa din första</a>.</div>{{end}}
+{{end}}
