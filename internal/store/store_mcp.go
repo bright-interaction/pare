@@ -38,9 +38,16 @@ type InvoiceSummary struct {
 	Total         ledger.Amount // in the invoice currency
 	Currency      string
 	TotalSEK      ledger.Amount // booked to Kundfordringar in SEK
+	AmountPaid    ledger.Amount // SEK settled so far (partial payments)
 	DueDate       string
 	Status        string
 	Overdue       bool // finalized + past due date
+	IsCredit      bool // this row is a kreditfaktura (negative document)
+}
+
+// PartlyPaid reports whether the invoice has been partially (not fully) settled.
+func (s InvoiceSummary) PartlyPaid() bool {
+	return s.Status == "finalized" && s.AmountPaid > 0 && s.AmountPaid < s.TotalSEK
 }
 
 // UnpaidInvoices lists finalized invoices that are not yet paid.
@@ -51,7 +58,8 @@ func (s *Store) UnpaidInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 	}
 	var out []InvoiceSummary
 	for _, in := range invs {
-		if in.Status != "finalized" {
+		// Only open receivables: finalized customer invoices, not credit notes.
+		if in.Status != "finalized" || in.CreditsInvoiceID.Valid {
 			continue
 		}
 		v, err := s.InvoiceForRender(ctx, companyID, in.ID)

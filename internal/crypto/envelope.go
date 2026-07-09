@@ -52,6 +52,15 @@ func (k *KEK) Fingerprint() string {
 	return hex.EncodeToString(mac.Sum(nil))[:16]
 }
 
+// DeriveKey returns a 32-byte subkey bound to a label, derived from the master
+// key via HMAC-SHA256. The database never holds it, so a DB-write attacker
+// cannot forge values (e.g. audit-log hashes) keyed with it.
+func (k *KEK) DeriveKey(label string) []byte {
+	mac := hmac.New(sha256.New, k.key)
+	mac.Write([]byte(label))
+	return mac.Sum(nil)
+}
+
 // NewDEK returns a fresh random 32-byte data-encryption key.
 func NewDEK() ([]byte, error) {
 	dek := make([]byte, KeySize)

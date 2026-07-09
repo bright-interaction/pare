@@ -51,6 +51,9 @@ func (s *Store) RecordPayment(ctx context.Context, companyID, invoiceID uuid.UUI
 	if dbInv.Status != "finalized" {
 		return uuid.Nil, ErrNotFinalized
 	}
+	if paymentSEK <= 0 {
+		return uuid.Nil, ErrPaymentMismatch
+	}
 	view, err := s.InvoiceForRender(ctx, companyID, invoiceID)
 	if err != nil {
 		return uuid.Nil, err
@@ -59,23 +62,51 @@ func (s *Store) RecordPayment(ctx context.Context, companyID, invoiceID uuid.UUI
 
 	lines := []ledger.Line{
 		{Account: account, Debit: paymentSEK},
-		{Account: "1510", Credit: gross},
+		{Account: "1510", Credit: paymentSEK},
 	}
-	// A currency difference only exists for a foreign-currency invoice, where the
-	// SEK received differs from the SEK booked at the finalize rate. For a SEK
-	// invoice any mismatch is a data-entry error (partial payments are a separate
-	// feature), not a kursdifferens, so reject rather than mis-book it to 3960/7960.
-	diff := paymentSEK - gross
-	if dbInv.Currency == "SEK" {
-		if diff != 0 {
+	fullyPaid := false
+
+	if dbInv.Currency != "SEK" {
+		// Foreign-currency invoices settle in a single payment; the SEK received
+		// vs the SEK booked at the finalize rate is a kursdifferens. (Partial
+		// payments of a foreign invoice are not supported.)
+		if ledger.Amount(dbInv.AmountPaidOre) != 0 {
 			return uuid.Nil, ErrPaymentMismatch
 		}
-	} else {
-		switch {
+		lines[1].Credit = gross // clear the whole receivable
+		switch diff := paymentSEK - gross; {
 		case diff > 0:
 			lines = append(lines, ledger.Line{Account: "3960", Credit: diff}) // valutakursvinst
 		case diff < 0:
 			lines = append(lines, ledger.Line{Account: "7960", Debit: -diff}) // valutakursförlust
+		}
+		fullyPaid = true
+	} else {
+		// SEK: support instalments and öresavrundning. residual is the receivable
+		// remaining after this payment.
+		newPaid := ledger.Amount(dbInv.AmountPaidOre) + paymentSEK
+		residual := gross - newPaid
+		switch {
+		case residual == 0:
+			fullyPaid = true
+		case absAmount(residual) < oresRoundingThreshold:
+			// Close the small difference to 3740 (öres- och kronutjämning).
+			if residual > 0 { // slightly underpaid: write off as a tiny cost
+				lines = append(lines,
+					ledger.Line{Account: "1510", Credit: residual},
+					ledger.Line{Account: "3740", Debit: residual})
+			} else { // slightly overpaid: tiny income
+				r := -residual
+				lines = append(lines,
+					ledger.Line{Account: "1510", Debit: r},
+					ledger.Line{Account: "3740", Credit: r})
+			}
+			fullyPaid = true
+		case residual < 0:
+			// Overpaid beyond the öre tolerance: that is a refund, not a payment.
+			return uuid.Nil, ErrPaymentMismatch
+		default:
+			// residual > tolerance: a genuine partial payment; invoice stays open.
 		}
 	}
 
@@ -86,22 +117,37 @@ func (s *Store) RecordPayment(ctx context.Context, companyID, invoiceID uuid.UUI
 			return err
 		}
 		verID = id
-		// The status='finalized' guard serializes concurrent payments: only one
-		// tx flips finalized->paid, the loser sees 0 rows and we roll back its
-		// duplicate verifikat.
-		n, err := qtx.MarkInvoicePaid(ctx, gen.MarkInvoicePaidParams{
-			ID:                    invoiceID,
-			PaidAt:                pgDate(date),
-			PaymentVerificationID: pgUUID(id),
-			CompanyID:             companyID,
-		})
-		if err != nil {
+		if err := qtx.AddInvoicePayment(ctx, gen.AddInvoicePaymentParams{ID: invoiceID, AmountPaidOre: int64(paymentSEK), CompanyID: companyID}); err != nil {
 			return err
 		}
-		if n == 0 {
-			return ErrNotFinalized
+		if fullyPaid {
+			// The status='finalized' guard serializes concurrent final payments:
+			// only one flips finalized->paid, the loser sees 0 rows and rolls back.
+			n, err := qtx.MarkInvoicePaid(ctx, gen.MarkInvoicePaidParams{
+				ID:                    invoiceID,
+				PaidAt:                pgDate(date),
+				PaymentVerificationID: pgUUID(id),
+				CompanyID:             companyID,
+			})
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return ErrNotFinalized
+			}
 		}
 		return s.logAudit(ctx, qtx, companyID, "record_payment", "invoice", invoiceID.String(), dbInv.Number+" "+paymentSEK.String()+" SEK")
 	})
 	return verID, err
+}
+
+// oresRoundingThreshold: a final payment within this of the balance settles the
+// invoice, with the difference booked to 3740 (under 1 SEK).
+const oresRoundingThreshold = ledger.Amount(100)
+
+func absAmount(a ledger.Amount) ledger.Amount {
+	if a < 0 {
+		return -a
+	}
+	return a
 }

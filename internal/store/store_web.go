@@ -102,7 +102,7 @@ func (s *Store) ListInvoiceSummaries(ctx context.Context, companyID uuid.UUID) (
 		if err != nil {
 			return nil, err
 		}
-		overdue := in.Status == "finalized" && !v.DueDate.IsZero() && v.DueDate.Before(time.Now().Truncate(24*time.Hour))
+		overdue := in.Status == "finalized" && !in.CreditsInvoiceID.Valid && !v.DueDate.IsZero() && v.DueDate.Before(time.Now().Truncate(24*time.Hour))
 		out = append(out, InvoiceSummary{
 			ID:            in.ID,
 			Number:        v.Number,
@@ -111,9 +111,11 @@ func (s *Store) ListInvoiceSummaries(ctx context.Context, companyID uuid.UUID) (
 			Total:         v.Total,
 			Currency:      v.Currency,
 			TotalSEK:      v.TotalSEK,
+			AmountPaid:    v.AmountPaid,
 			DueDate:       fmtDate(v.DueDate),
 			Status:        in.Status,
 			Overdue:       overdue,
+			IsCredit:      in.CreditsInvoiceID.Valid,
 		})
 	}
 	return out, nil

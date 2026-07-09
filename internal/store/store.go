@@ -24,14 +24,15 @@ import (
 
 // Store is the ledger persistence layer.
 type Store struct {
-	pool *pgxpool.Pool
-	q    *gen.Queries
-	kek  *crypto.KEK
+	pool     *pgxpool.Pool
+	q        *gen.Queries
+	kek      *crypto.KEK
+	auditKey []byte // HMAC key for the audit hash chain (derived, never stored)
 }
 
 // New builds a Store over a pgx pool and the key-encryption key.
 func New(pool *pgxpool.Pool, kek *crypto.KEK) *Store {
-	return &Store{pool: pool, q: gen.New(pool), kek: kek}
+	return &Store{pool: pool, q: gen.New(pool), kek: kek, auditKey: kek.DeriveKey("pare/audit/hmac/v1")}
 }
 
 // ErrUnknownAccount is returned when a posting references an account not in the

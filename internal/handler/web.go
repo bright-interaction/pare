@@ -577,8 +577,8 @@ func (s *Server) handlePayForm(w http.ResponseWriter, r *http.Request) {
 	pd := s.base(r, "Registrera betalning")
 	pd.Data = payData{
 		ID: id.String(), Number: v.Number, CustomerName: v.Customer.Name,
-		Total: v.Total, Currency: v.Currency, TotalSEK: v.TotalSEK,
-		TotalSEKInput: oreDot(v.TotalSEK), BankAccounts: banks,
+		Total: v.Total, Currency: v.Currency, TotalSEK: v.Outstanding(),
+		TotalSEKInput: oreDot(v.Outstanding()), BankAccounts: banks,
 	}
 	render(w, "pay", pd, http.StatusOK)
 }

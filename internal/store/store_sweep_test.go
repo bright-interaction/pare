@@ -13,13 +13,6 @@ func TestSweep(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	// These tables are outside testdb.Reset's set, so clean them for isolation.
-	for _, tbl := range []string{"sessions", "shield_tokens", "users"} {
-		if _, err := pool.Exec(ctx, "DELETE FROM "+tbl); err != nil {
-			t.Fatalf("clean %s: %v", tbl, err)
-		}
-	}
-
 	// An expired session and a stale shield token (created 48h ago).
 	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, password_hash) VALUES (gen_random_uuid(), 'a@b.se', 'x')`); err != nil {
 		t.Fatalf("user: %v", err)

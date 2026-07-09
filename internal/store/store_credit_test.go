@@ -39,8 +39,8 @@ func TestCreditInvoice(t *testing.T) {
 	}
 
 	orig, _ := s.InvoiceForRender(ctx, co, invID)
-	if orig.Status != "cancelled" {
-		t.Fatalf("original not cancelled: %s", orig.Status)
+	if orig.Status != "credited" {
+		t.Fatalf("original not credited: %s", orig.Status)
 	}
 	credit, _ := s.InvoiceForRender(ctx, co, creditID)
 	if !credit.IsCredit || credit.CreditsNumber != orig.Number {

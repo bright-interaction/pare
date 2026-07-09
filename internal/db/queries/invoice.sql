@@ -43,6 +43,12 @@ UPDATE invoices SET credits_invoice_id = $2 WHERE id = $1;
 -- name: MarkInvoiceCancelled :execrows
 UPDATE invoices SET status = 'cancelled' WHERE id = $1 AND company_id = $2 AND status = 'finalized';
 
+-- name: MarkInvoiceCredited :execrows
+UPDATE invoices SET status = 'credited' WHERE id = $1 AND company_id = $2 AND status IN ('finalized', 'paid');
+
+-- name: AddInvoicePayment :exec
+UPDATE invoices SET amount_paid_ore = amount_paid_ore + $2 WHERE id = $1 AND company_id = $3;
+
 -- name: MarkInvoicePaid :execrows
 UPDATE invoices
 SET status = 'paid', paid_at = $2, payment_verification_id = $3

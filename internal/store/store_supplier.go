@@ -131,12 +131,25 @@ func (s *Store) RecordSupplierPayment(ctx context.Context, companyID, id uuid.UU
 		return uuid.Nil, ErrNotFinalized
 	}
 	gross := moms.Payable(ledger.Amount(row.NetOre), moms.PurchaseCode(row.VatCode))
-	if amountSEK != gross {
+	if amountSEK <= 0 {
 		return uuid.Nil, ErrPaymentMismatch
 	}
+	// Clear the whole 2440 liability; the bank moves the amount actually paid, and
+	// a small difference (paying a rounded amount) closes to 3740. A larger
+	// mismatch is a data-entry error (partial supplier payments not supported).
 	lines := []ledger.Line{
 		{Account: "2440", Debit: gross},
-		{Account: account, Credit: gross},
+		{Account: account, Credit: amountSEK},
+	}
+	if diff := gross - amountSEK; diff != 0 {
+		if absAmount(diff) >= oresRoundingThreshold {
+			return uuid.Nil, ErrPaymentMismatch
+		}
+		if diff > 0 { // paid slightly less: tiny rounding income
+			lines = append(lines, ledger.Line{Account: "3740", Credit: diff})
+		} else { // paid slightly more: tiny rounding cost
+			lines = append(lines, ledger.Line{Account: "3740", Debit: -diff})
+		}
 	}
 	desc := "Betalning leverantörsfaktura"
 	if row.SupplierNumber != "" {
