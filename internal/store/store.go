@@ -269,6 +269,7 @@ type Counterparty struct {
 	Personnummer string
 	Address      string
 	IBAN         string
+	Email        string
 	Erased       bool // GDPR-erased: identity fields are tombstoned
 }
 
@@ -290,8 +291,8 @@ func (s *Store) CreateCounterparty(ctx context.Context, companyID uuid.UUID, cp 
 		}
 		return dek.EncryptField([]byte(v))
 	}
-	fields := make([]string, 5)
-	for i, v := range []string{cp.Name, cp.OrgNr, cp.Personnummer, cp.Address, cp.IBAN} {
+	fields := make([]string, 6)
+	for i, v := range []string{cp.Name, cp.OrgNr, cp.Personnummer, cp.Address, cp.IBAN, cp.Email} {
 		e, err := enc(v)
 		if err != nil {
 			return uuid.Nil, err
@@ -306,6 +307,7 @@ func (s *Store) CreateCounterparty(ctx context.Context, companyID uuid.UUID, cp 
 		PersonnummerEnc: fields[2],
 		AddressEnc:      fields[3],
 		IbanEnc:         fields[4],
+		EmailEnc:        fields[5],
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("store: insert counterparty: %w", err)
@@ -346,6 +348,7 @@ func (s *Store) GetCounterparty(ctx context.Context, companyID, id uuid.UUID) (C
 		{row.PersonnummerEnc, &out.Personnummer},
 		{row.AddressEnc, &out.Address},
 		{row.IbanEnc, &out.IBAN},
+		{row.EmailEnc, &out.Email},
 	} {
 		v, err := dec(f.enc)
 		if err != nil {

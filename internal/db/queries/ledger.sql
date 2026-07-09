@@ -82,8 +82,8 @@ ORDER BY l.account;
 
 -- name: InsertCounterparty :one
 INSERT INTO counterparties
-    (company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+    (company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, email_enc)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetCounterparty :one
@@ -94,12 +94,12 @@ SELECT * FROM counterparties WHERE company_id = $1 ORDER BY created_at;
 
 -- name: UpdateCounterparty :exec
 UPDATE counterparties
-SET kind = $3, name_enc = $4, orgnr_enc = $5, personnummer_enc = $6, address_enc = $7, iban_enc = $8
+SET kind = $3, name_enc = $4, orgnr_enc = $5, personnummer_enc = $6, address_enc = $7, iban_enc = $8, email_enc = $9
 WHERE id = $1 AND company_id = $2 AND erased_at IS NULL;
 
 -- name: EraseCounterparty :exec
 UPDATE counterparties
-SET name_enc = $3, orgnr_enc = '', personnummer_enc = '', address_enc = '', iban_enc = '',
+SET name_enc = $3, orgnr_enc = '', personnummer_enc = '', address_enc = '', iban_enc = '', email_enc = '',
     erased_at = now()
 WHERE id = $1 AND company_id = $2 AND erased_at IS NULL;
 

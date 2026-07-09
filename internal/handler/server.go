@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/httprate"
 
 	"github.com/brightinteraction/pare/internal/auth"
+	"github.com/brightinteraction/pare/internal/email"
 	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/mcp"
 	renderpkg "github.com/brightinteraction/pare/internal/render"
@@ -26,6 +27,7 @@ type Server struct {
 	Auth      *auth.Auth
 	Store     *store.Store
 	Gotenberg *renderpkg.Gotenberg
+	Mailer    *email.Mailer
 	// SecureCookies marks auth/CSRF cookies Secure (mirrors the auth setting;
 	// disabled only for local plain-HTTP dev via PARE_INSECURE_COOKIES=1).
 	SecureCookies bool
@@ -87,6 +89,8 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/invoices/{id}/finalize", s.handleInvoiceFinalize)
 				r.Post("/invoices/{id}/delete", s.handleInvoiceDelete)
 				r.Post("/invoices/{id}/credit", s.handleInvoiceCredit)
+				r.Post("/invoices/{id}/send", s.handleInvoiceSend)
+				r.Post("/invoices/{id}/remind", s.handleInvoiceRemind)
 				r.Get("/invoices/{id}/pay", s.handlePayForm)
 				r.Post("/invoices/{id}/pay", s.handlePay)
 				r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)

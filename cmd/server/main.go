@@ -19,6 +19,7 @@ import (
 	"github.com/brightinteraction/pare/internal/crypto"
 	"github.com/brightinteraction/pare/internal/db"
 	gen "github.com/brightinteraction/pare/internal/db/generated"
+	"github.com/brightinteraction/pare/internal/email"
 	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/handler"
 	"github.com/brightinteraction/pare/internal/mcp"
@@ -79,10 +80,15 @@ func main() {
 	st.StartSweeper(ctx, time.Hour)
 
 	secureCookies := os.Getenv("PARE_INSECURE_COOKIES") != "1"
+	mailer := email.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom, cfg.SMTPFromName, cfg.SMTPTLS)
+	if mailer.Enabled() {
+		slog.Info("email enabled", "from", cfg.SMTPFrom)
+	}
 	srv := &handler.Server{
 		Store:         st,
 		Auth:          auth.New(gen.New(pool), secureCookies),
 		Gotenberg:     render.NewGotenberg(cfg.GotenbergURL),
+		Mailer:        mailer,
 		SecureCookies: secureCookies,
 	}
 	if len(cfg.ShieldKey) == 32 && cfg.MCPKey != "" {
