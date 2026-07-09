@@ -34,6 +34,20 @@ const (
 	ctxCompany
 )
 
+// blockViewerWrites rejects state-changing requests from a read-only viewer
+// (revisor) role. Mount it after requireSession so the role is in context.
+func (s *Server) blockViewerWrites(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !safeMethod(r.Method) {
+			if info, ok := r.Context().Value(ctxSession).(auth.SessionInfo); ok && !info.IsOwner() {
+				http.Error(w, "read-only (revisor) account", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) requireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(auth.CookieName)
@@ -130,7 +144,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	// Seller profile for valid invoices (best-effort; editable later under Företag).
 	_ = s.Store.UpdateCompanyProfile(r.Context(), companyProfileFromForm(r, coID, company, orgnr))
-	if err := s.Auth.CreateUser(r.Context(), email, pw); err != nil {
+	if err := s.Auth.CreateUser(r.Context(), email, pw, "owner"); err != nil {
 		render(w, "setup", pageData{Title: "Kom igång", CSRF: csrfToken(r), Error: "Kunde inte skapa konto."}, http.StatusBadRequest)
 		return
 	}
@@ -247,11 +261,33 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pd := s.base(r, "Företag")
-	if r.URL.Query().Get("msg") == "saved" {
+	switch r.URL.Query().Get("msg") {
+	case "saved":
 		pd.Flash = "Företagsuppgifterna sparades."
+	case "userok":
+		pd.Flash = "Revisorskontot skapades (läsbehörighet)."
+	case "userbad":
+		pd.Error = "Ange e-post och lösenord (minst 8 tecken)."
+	case "userexists":
+		pd.Error = "Kunde inte skapa kontot (e-posten kan redan finnas)."
 	}
 	pd.Data = ci
 	render(w, "settings", pd, http.StatusOK)
+}
+
+func (s *Server) handleInviteUser(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	email := strings.TrimSpace(r.PostFormValue("email"))
+	pw := r.PostFormValue("password")
+	if email == "" || len(pw) < 8 {
+		http.Redirect(w, r, "/settings?msg=userbad", http.StatusSeeOther)
+		return
+	}
+	if err := s.Auth.CreateUser(r.Context(), email, pw, "viewer"); err != nil {
+		http.Redirect(w, r, "/settings?msg=userexists", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/settings?msg=userok", http.StatusSeeOther)
 }
 
 func (s *Server) handleSettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -946,6 +982,8 @@ type loggData struct {
 	Locked        bool
 	LockedThrough string
 	Entries       []loggRow
+	ChainOK       bool
+	ChainBrokenAt int64
 }
 
 func (s *Server) handleLogg(w http.ResponseWriter, r *http.Request) {
@@ -961,6 +999,7 @@ func (s *Server) handleLogg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := loggData{Locked: locked}
+	d.ChainOK, d.ChainBrokenAt, _ = s.Store.VerifyAuditChain(ctx, co)
 	if locked {
 		d.LockedThrough = through.Format("2006-01-02")
 	}

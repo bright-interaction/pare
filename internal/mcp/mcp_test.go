@@ -59,7 +59,7 @@ func setup(t *testing.T) (http.Handler, func()) {
 	}
 
 	shieldKey, _ := crypto.NewDEK()
-	srv, err := New(st, pool, shieldKey, testKey)
+	srv, err := New(st, pool, shieldKey, testKey, 0)
 	if err != nil {
 		t.Fatalf("mcp: %v", err)
 	}

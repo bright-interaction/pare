@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getLastAuditHash = `-- name: GetLastAuditHash :one
+SELECT entry_hash FROM audit_log WHERE company_id = $1 ORDER BY id DESC LIMIT 1
+`
+
+func (q *Queries) GetLastAuditHash(ctx context.Context, companyID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getLastAuditHash, companyID)
+	var entry_hash string
+	err := row.Scan(&entry_hash)
+	return entry_hash, err
+}
+
 const getVerification = `-- name: GetVerification :one
 SELECT id, company_id, series, number, vdate, description, reversal_of, posted_at, created_at FROM verifications WHERE id = $1
 `
@@ -34,8 +45,8 @@ func (q *Queries) GetVerification(ctx context.Context, id uuid.UUID) (Verificati
 }
 
 const insertAuditLog = `-- name: InsertAuditLog :exec
-INSERT INTO audit_log (company_id, actor, actor_detail, action, target_type, target_id, detail)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO audit_log (company_id, actor, actor_detail, action, target_type, target_id, detail, prev_hash, entry_hash)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type InsertAuditLogParams struct {
@@ -46,6 +57,8 @@ type InsertAuditLogParams struct {
 	TargetType  string    `json:"target_type"`
 	TargetID    string    `json:"target_id"`
 	Detail      string    `json:"detail"`
+	PrevHash    string    `json:"prev_hash"`
+	EntryHash   string    `json:"entry_hash"`
 }
 
 func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error {
@@ -57,12 +70,61 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.TargetType,
 		arg.TargetID,
 		arg.Detail,
+		arg.PrevHash,
+		arg.EntryHash,
 	)
 	return err
 }
 
+const listAuditChain = `-- name: ListAuditChain :many
+SELECT id, actor, actor_detail, action, target_type, target_id, detail, prev_hash, entry_hash
+FROM audit_log WHERE company_id = $1 ORDER BY id ASC
+`
+
+type ListAuditChainRow struct {
+	ID          int64  `json:"id"`
+	Actor       string `json:"actor"`
+	ActorDetail string `json:"actor_detail"`
+	Action      string `json:"action"`
+	TargetType  string `json:"target_type"`
+	TargetID    string `json:"target_id"`
+	Detail      string `json:"detail"`
+	PrevHash    string `json:"prev_hash"`
+	EntryHash   string `json:"entry_hash"`
+}
+
+func (q *Queries) ListAuditChain(ctx context.Context, companyID uuid.UUID) ([]ListAuditChainRow, error) {
+	rows, err := q.db.Query(ctx, listAuditChain, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditChainRow
+	for rows.Next() {
+		var i ListAuditChainRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Actor,
+			&i.ActorDetail,
+			&i.Action,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Detail,
+			&i.PrevHash,
+			&i.EntryHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditLog = `-- name: ListAuditLog :many
-SELECT id, company_id, actor, actor_detail, action, target_type, target_id, detail, at FROM audit_log WHERE company_id = $1 ORDER BY at DESC, id DESC LIMIT $2
+SELECT id, company_id, actor, actor_detail, action, target_type, target_id, detail, at, prev_hash, entry_hash FROM audit_log WHERE company_id = $1 ORDER BY at DESC, id DESC LIMIT $2
 `
 
 type ListAuditLogParams struct {
@@ -89,6 +151,8 @@ func (q *Queries) ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]A
 			&i.TargetID,
 			&i.Detail,
 			&i.At,
+			&i.PrevHash,
+			&i.EntryHash,
 		); err != nil {
 			return nil, err
 		}

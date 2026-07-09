@@ -21,4 +21,15 @@
   <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:12px"><input type="checkbox" name="fskatt" value="1" style="width:auto" {{if $c.FSkatt}}checked{{end}}> Godkänd för F-skatt</label>
   <div style="margin-top:16px"><button class="btn" type="submit">Spara</button></div>
 </form>
+
+<h2>Bjud in revisor</h2>
+<p class="muted" style="max-width:560px">Skapa ett läskonto (revisor) som kan se allt men inte ändra något. Bara ägaren kan bjuda in.</p>
+<form method="post" action="/users">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="row">
+    <div><label>E-post</label><input name="email" type="email" required></div>
+    <div><label>Lösenord</label><input name="password" type="password" minlength="8" required></div>
+    <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn secondary" type="submit">Skapa revisorskonto</button></div>
+  </div>
+</form>
 {{end}}

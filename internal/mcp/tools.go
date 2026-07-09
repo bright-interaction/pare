@@ -108,6 +108,15 @@ func emptySchema() map[string]any {
 	return map[string]any{"type": "object", "properties": map[string]any{}}
 }
 
+// checkCeiling rejects an AI write whose amount (öre) exceeds the configured
+// per-write ceiling. A ceiling of 0 disables the cap.
+func checkCeiling(tc toolCtx, ore int64) error {
+	if tc.maxWriteOre > 0 && ore > tc.maxWriteOre {
+		return errCeiling
+	}
+	return nil
+}
+
 func periodSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -361,6 +370,7 @@ func runPostVerification(ctx context.Context, tc toolCtx, args json.RawMessage) 
 		return nil, errBadDate
 	}
 	lines := make([]ledger.Line, 0, len(in.Lines))
+	var debitTotal int64
 	for _, l := range in.Lines {
 		lines = append(lines, ledger.Line{
 			Account: l.Account,
@@ -368,6 +378,10 @@ func runPostVerification(ctx context.Context, tc toolCtx, args json.RawMessage) 
 			Credit:  ledger.Amount(l.CreditOre),
 			VATCode: l.VATCode,
 		})
+		debitTotal += l.DebitOre
+	}
+	if err := checkCeiling(tc, debitTotal); err != nil {
+		return nil, err
 	}
 	verID, err := tc.store.PostVerification(ctx, tc.company, in.Series, date, in.Description, lines, uuid.Nil)
 	if err != nil {
@@ -393,6 +407,9 @@ func runRecordPayment(ctx context.Context, tc toolCtx, args json.RawMessage) (an
 	account := in.Account
 	if account == "" {
 		account = "1930"
+	}
+	if err := checkCeiling(tc, in.ReceivedSEKOre); err != nil {
+		return nil, err
 	}
 	verID, err := tc.store.RecordPaymentByNumber(ctx, tc.company, in.InvoiceNumber, date, account, ledger.Amount(in.ReceivedSEKOre))
 	if err != nil {

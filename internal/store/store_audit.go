@@ -5,10 +5,13 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/brightinteraction/pare/internal/db/generated"
@@ -41,6 +44,11 @@ func actorFrom(ctx context.Context) Actor {
 
 func (s *Store) logAudit(ctx context.Context, q *gen.Queries, companyID uuid.UUID, action, targetType, targetID, detail string) error {
 	a := actorFrom(ctx)
+	prev, err := q.GetLastAuditHash(ctx, companyID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	entry := auditHash(prev, a.Kind, a.Detail, action, targetType, targetID, detail)
 	return q.InsertAuditLog(ctx, gen.InsertAuditLogParams{
 		CompanyID:   companyID,
 		Actor:       a.Kind,
@@ -49,7 +57,39 @@ func (s *Store) logAudit(ctx context.Context, q *gen.Queries, companyID uuid.UUI
 		TargetType:  targetType,
 		TargetID:    targetID,
 		Detail:      detail,
+		PrevHash:    prev,
+		EntryHash:   entry,
 	})
+}
+
+// auditHash chains an audit entry to the previous one: h = SHA256(prev || fields).
+// Tampering with any content field or reordering breaks every following hash.
+func auditHash(prev string, fields ...string) string {
+	h := sha256.New()
+	h.Write([]byte(prev))
+	for _, f := range fields {
+		h.Write([]byte{0})
+		h.Write([]byte(f))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// VerifyAuditChain recomputes the hash chain and returns whether it is intact
+// and, if not, the id of the first tampered entry.
+func (s *Store) VerifyAuditChain(ctx context.Context, companyID uuid.UUID) (ok bool, brokenAt int64, err error) {
+	rows, err := s.q.ListAuditChain(ctx, companyID)
+	if err != nil {
+		return false, 0, err
+	}
+	prev := ""
+	for _, r := range rows {
+		want := auditHash(prev, r.Actor, r.ActorDetail, r.Action, r.TargetType, r.TargetID, r.Detail)
+		if r.PrevHash != prev || r.EntryHash != want {
+			return false, r.ID, nil
+		}
+		prev = r.EntryHash
+	}
+	return true, 0, nil
 }
 
 // LockedThrough returns the current period-lock boundary, if any.

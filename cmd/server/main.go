@@ -86,7 +86,7 @@ func main() {
 		SecureCookies: secureCookies,
 	}
 	if len(cfg.ShieldKey) == 32 && cfg.MCPKey != "" {
-		m, err := mcp.New(st, pool, cfg.ShieldKey, cfg.MCPKey)
+		m, err := mcp.New(st, pool, cfg.ShieldKey, cfg.MCPKey, cfg.MCPMaxOre)
 		if err != nil {
 			slog.Error("mcp", "err", err)
 			os.Exit(1)

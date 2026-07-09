@@ -30,6 +30,7 @@ import (
 var (
 	errInvalidArgs = errors.New("invalid arguments")
 	errBadDate     = errors.New("date must be YYYY-MM-DD")
+	errCeiling     = errors.New("amount exceeds the assistant write ceiling; a human must do this in the Pare UI")
 )
 
 // scrubError keeps internal plumbing (pgx/driver strings, DB host:port, wrapped
@@ -58,30 +59,33 @@ func scrubError(err error) string {
 
 // Server is the Pare MCP endpoint.
 type Server struct {
-	store  *store.Store
-	shield *shield.Shield
-	apiKey string
-	tools  map[string]tool
-	order  []string
+	store       *store.Store
+	shield      *shield.Shield
+	apiKey      string
+	maxWriteOre int64 // per-write ceiling for AI-posted amounts (0 = unlimited)
+	tools       map[string]tool
+	order       []string
 }
 
 // New builds the MCP server. shieldKey must be a 32-byte key; apiKey gates
-// access. Returns an error if the shield key is invalid.
-func New(st *store.Store, pool *pgxpool.Pool, shieldKey []byte, apiKey string) (*Server, error) {
+// access; maxWriteOre caps a single AI write (0 disables the cap). Returns an
+// error if the shield key is invalid.
+func New(st *store.Store, pool *pgxpool.Pool, shieldKey []byte, apiKey string, maxWriteOre int64) (*Server, error) {
 	sh, err := shield.New(shieldKey, shield.NewPgStore(gen.New(pool)))
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: st, shield: sh, apiKey: apiKey, tools: map[string]tool{}}
+	s := &Server{store: st, shield: sh, apiKey: apiKey, maxWriteOre: maxWriteOre, tools: map[string]tool{}}
 	s.register()
 	return s, nil
 }
 
 // toolCtx is passed to each tool handler.
 type toolCtx struct {
-	store   *store.Store
-	sess    *shield.Session
-	company uuid.UUID
+	store       *store.Store
+	sess        *shield.Session
+	company     uuid.UUID
+	maxWriteOre int64
 }
 
 // tool is one MCP tool.
@@ -212,7 +216,7 @@ func (s *Server) callTool(ctx context.Context, r *http.Request, req rpcReq, ok f
 	// Attribute every AI write in the audit log as actor "ai".
 	ctx = store.WithActor(ctx, store.Actor{Kind: "ai", Detail: "mcp"})
 	sess := s.shield.Session(sessionID(r))
-	res, err := t.run(ctx, toolCtx{store: s.store, sess: sess, company: company}, p.Arguments)
+	res, err := t.run(ctx, toolCtx{store: s.store, sess: sess, company: company, maxWriteOre: s.maxWriteOre}, p.Arguments)
 	if err != nil {
 		slog.Error("mcp tool error", "tool", p.Name, "err", err)
 		return toolError(ok, scrubError(err))

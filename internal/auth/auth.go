@@ -46,13 +46,17 @@ func (a *Auth) HasUsers(ctx context.Context) (bool, error) {
 	return n > 0, err
 }
 
-// CreateUser registers an operator with a bcrypt-hashed password.
-func (a *Auth) CreateUser(ctx context.Context, email, password string) error {
+// CreateUser registers an operator with a bcrypt-hashed password and a role
+// ("owner" or "viewer"; anything else becomes "owner").
+func (a *Auth) CreateUser(ctx context.Context, email, password, role string) error {
+	if role != "viewer" {
+		role = "owner"
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	_, err = a.q.InsertUser(ctx, gen.InsertUserParams{Email: email, PasswordHash: string(hash)})
+	_, err = a.q.InsertUser(ctx, gen.InsertUserParams{Email: email, PasswordHash: string(hash), Role: role})
 	return err
 }
 
@@ -86,7 +90,11 @@ func (a *Auth) Logout(ctx context.Context, token string) error {
 type SessionInfo struct {
 	UserID uuid.UUID
 	Email  string
+	Role   string
 }
+
+// IsOwner reports whether the session may perform state-changing actions.
+func (s SessionInfo) IsOwner() bool { return s.Role != "viewer" }
 
 // Validate returns the session for a token, if valid and unexpired.
 func (a *Auth) Validate(ctx context.Context, token string) (SessionInfo, bool) {
@@ -100,7 +108,7 @@ func (a *Auth) Validate(ctx context.Context, token string) (SessionInfo, bool) {
 	if !row.ExpiresAt.Valid || row.ExpiresAt.Time.Before(time.Now()) {
 		return SessionInfo{}, false
 	}
-	return SessionInfo{UserID: row.UserID, Email: row.Email}, true
+	return SessionInfo{UserID: row.UserID, Email: row.Email, Role: row.Role}, true
 }
 
 // SetCookie writes the session cookie.

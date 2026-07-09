@@ -65,9 +65,11 @@ type Export struct {
 	Accounts    []Account
 	Vouchers    []Voucher
 	// OpeningBalances (#IB, year 0) seed the ledger on import; ClosingBalances
-	// (#UB, year 0) let an import verify it reconstructed the same position.
+	// (#UB, year 0) let an import verify it reconstructed the same position;
+	// Results (#RES, year 0) are the result-account balances for the year.
 	OpeningBalances []Balance
 	ClosingBalances []Balance
+	Results         []Balance
 }
 
 // Balances checks that every voucher's transaction amounts sum to zero.
@@ -107,6 +109,16 @@ func (e Export) Write(w io.Writer) error {
 	line("#VALUTA SEK")
 	for _, a := range e.Accounts {
 		line("#KONTO %s %s", a.Number, quote(a.Name))
+	}
+	// Balance and result records for the current year (index 0).
+	for _, b := range e.OpeningBalances {
+		line("#IB 0 %s %s", b.Account, amount(b.Amount))
+	}
+	for _, b := range e.ClosingBalances {
+		line("#UB 0 %s %s", b.Account, amount(b.Amount))
+	}
+	for _, b := range e.Results {
+		line("#RES 0 %s %s", b.Account, amount(b.Amount))
 	}
 	for _, v := range e.Vouchers {
 		line("#VER %s %d %s %s", verSeries(v.Series), v.Number, ymd(v.Date), quote(v.Text))

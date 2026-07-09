@@ -25,6 +25,7 @@
 </form>
 
 <h2>Aktivitetslogg</h2>
+{{if $d.ChainOK}}<div class="alert ok">Verifikationskedjan är intakt (loggen är inte manipulerad).</div>{{else}}<div class="alert error">Varning: verifikationskedjan är bruten vid post #{{$d.ChainBrokenAt}}. Loggen kan ha manipulerats.</div>{{end}}
 {{if $d.Entries}}
 <table>
   <tr><th>Tid</th><th>Vem</th><th>Händelse</th><th>Detalj</th></tr>
