@@ -5,6 +5,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -49,6 +50,7 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 		}
 		ctx := context.WithValue(r.Context(), ctxSession, info)
 		ctx = context.WithValue(ctx, ctxCompany, company)
+		ctx = store.WithActor(ctx, store.Actor{Kind: "user", Detail: info.Email})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -335,6 +337,168 @@ func (s *Server) handleSIE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=pare-export.se")
 	if err := exp.Write(w); err != nil {
 		slog.Error("sie write", "err", err)
+	}
+}
+
+// --- verifikat, undo, period lock, audit log ---
+
+type verifikatData struct {
+	Accounts      []ledger.Account
+	Verifications []store.VerificationSummary
+}
+
+func (s *Server) handleVerifications(w http.ResponseWriter, r *http.Request) {
+	co, ctx := companyID(r), r.Context()
+	accts, err := s.Store.ChartAccounts(ctx, co)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	vers, err := s.Store.ListVerificationSummaries(ctx, co)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	pd := s.base(r, "Verifikat")
+	pd.Data = verifikatData{Accounts: accts, Verifications: vers}
+	render(w, "verifikat", pd, http.StatusOK)
+}
+
+func (s *Server) handlePostVerification(w http.ResponseWriter, r *http.Request) {
+	co, ctx := companyID(r), r.Context()
+	_ = r.ParseForm()
+	series := strings.TrimSpace(r.PostFormValue("series"))
+	if series == "" {
+		series = "A"
+	}
+	date, err := time.Parse("2006-01-02", r.PostFormValue("date"))
+	if err != nil {
+		http.Redirect(w, r, "/verifications", http.StatusSeeOther)
+		return
+	}
+	accounts := r.PostForm["account"]
+	debits := r.PostForm["debit"]
+	credits := r.PostForm["credit"]
+	var lines []ledger.Line
+	for i := range accounts {
+		acc := strings.TrimSpace(accounts[i])
+		if acc == "" {
+			continue
+		}
+		d, c := parseKrOre(get(debits, i)), parseKrOre(get(credits, i))
+		if d == 0 && c == 0 {
+			continue
+		}
+		lines = append(lines, ledger.Line{Account: acc, Debit: d, Credit: c})
+	}
+	_, err = s.Store.PostVerification(ctx, co, series, date, strings.TrimSpace(r.PostFormValue("description")), lines, uuid.Nil)
+	if err != nil {
+		accts, _ := s.Store.ChartAccounts(ctx, co)
+		vers, _ := s.Store.ListVerificationSummaries(ctx, co)
+		pd := s.base(r, "Verifikat")
+		pd.Error = verErrMsg(err)
+		pd.Data = verifikatData{Accounts: accts, Verifications: vers}
+		render(w, "verifikat", pd, http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, "/verifications", http.StatusSeeOther)
+}
+
+func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := s.Store.UndoVerification(r.Context(), companyID(r), id); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/verifications", http.StatusSeeOther)
+}
+
+type loggRow struct {
+	At          string
+	Actor       string
+	ActorDetail string
+	Action      string
+	Detail      string
+}
+
+type loggData struct {
+	Locked        bool
+	LockedThrough string
+	Entries       []loggRow
+}
+
+func (s *Server) handleLogg(w http.ResponseWriter, r *http.Request) {
+	co, ctx := companyID(r), r.Context()
+	through, locked, err := s.Store.LockedThrough(ctx, co)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	entries, err := s.Store.ListAudit(ctx, co, 100)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	d := loggData{Locked: locked}
+	if locked {
+		d.LockedThrough = through.Format("2006-01-02")
+	}
+	for _, e := range entries {
+		d.Entries = append(d.Entries, loggRow{
+			At:          e.At.Format("2006-01-02 15:04"),
+			Actor:       e.Actor,
+			ActorDetail: e.ActorDetail,
+			Action:      e.Action,
+			Detail:      e.Detail,
+		})
+	}
+	pd := s.base(r, "Logg")
+	pd.Data = d
+	render(w, "logg", pd, http.StatusOK)
+}
+
+func (s *Server) handleLock(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	through, err := time.Parse("2006-01-02", r.PostFormValue("through"))
+	if err == nil {
+		if err := s.Store.LockPeriod(r.Context(), companyID(r), through, strings.TrimSpace(r.PostFormValue("reason"))); err != nil {
+			s.fail(w, err)
+			return
+		}
+	}
+	http.Redirect(w, r, "/logg", http.StatusSeeOther)
+}
+
+func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	reason := strings.TrimSpace(r.PostFormValue("reason"))
+	if reason == "" {
+		http.Redirect(w, r, "/logg", http.StatusSeeOther)
+		return
+	}
+	if err := s.Store.UnlockPeriod(r.Context(), companyID(r), reason); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/logg", http.StatusSeeOther)
+}
+
+func verErrMsg(err error) string {
+	switch {
+	case errors.Is(err, ledger.ErrUnbalanced):
+		return "Verifikatet balanserar inte (debet måste vara lika med kredit)."
+	case errors.Is(err, store.ErrPeriodClosed):
+		return "Perioden är låst för det datumet. Bokför rättelsen i innevarande period."
+	case errors.Is(err, store.ErrUnknownAccount):
+		return "Ett konto finns inte i kontoplanen."
+	case errors.Is(err, ledger.ErrTooFewLines):
+		return "Ett verifikat behöver minst två rader."
+	default:
+		return "Kunde inte bokföra verifikatet."
 	}
 }
 

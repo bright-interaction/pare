@@ -36,6 +36,7 @@
   .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
   .pill.finalized{background:var(--accent-weak);color:var(--accent)} .pill.draft{background:#f1f2f4;color:var(--muted)}
   .pill.paid{background:#e8f0fe;color:#1a56db}
+  .pill.ai{background:#eef2ff;color:#4338ca} .pill.user{background:var(--accent-weak);color:var(--accent)} .pill.system{background:#f1f2f4;color:var(--muted)}
   .alert{padding:10px 14px;border-radius:8px;margin-bottom:16px} .alert.error{background:#fdecea;color:var(--danger)} .alert.ok{background:var(--accent-weak);color:var(--accent)}
   .row{display:flex;gap:10px;align-items:end} .row>*{flex:1}
   .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
@@ -49,8 +50,10 @@
   <nav>
     <a href="/dashboard">Översikt</a>
     <a href="/invoices">Fakturor</a>
+    <a href="/verifications">Verifikat</a>
     <a href="/counterparties">Kunder</a>
     <a href="/reports">Rapporter</a>
+    <a href="/logg">Logg</a>
   </nav>
   <div class="who">{{.CompanyName}} · {{.Email}}
     <form method="post" action="/logout"><button type="submit">Logga ut</button></form>

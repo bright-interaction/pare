@@ -17,12 +17,25 @@ type Account struct {
 	DefaultVatCode string    `json:"default_vat_code"`
 }
 
+type AuditLog struct {
+	ID          int64              `json:"id"`
+	CompanyID   uuid.UUID          `json:"company_id"`
+	Actor       string             `json:"actor"`
+	ActorDetail string             `json:"actor_detail"`
+	Action      string             `json:"action"`
+	TargetType  string             `json:"target_type"`
+	TargetID    string             `json:"target_id"`
+	Detail      string             `json:"detail"`
+	At          pgtype.Timestamptz `json:"at"`
+}
+
 type Company struct {
-	ID         uuid.UUID          `json:"id"`
-	Name       string             `json:"name"`
-	Orgnr      string             `json:"orgnr"`
-	DekWrapped string             `json:"dek_wrapped"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID            uuid.UUID          `json:"id"`
+	Name          string             `json:"name"`
+	Orgnr         string             `json:"orgnr"`
+	DekWrapped    string             `json:"dek_wrapped"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	LockedThrough pgtype.Date        `json:"locked_through"`
 }
 
 type Counterparty struct {

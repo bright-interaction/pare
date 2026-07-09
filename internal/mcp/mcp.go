@@ -175,6 +175,8 @@ func (s *Server) callTool(ctx context.Context, r *http.Request, req rpcReq, ok f
 	if err != nil {
 		return toolError(ok, "no company configured yet")
 	}
+	// Attribute every AI write in the audit log as actor "ai".
+	ctx = store.WithActor(ctx, store.Actor{Kind: "ai", Detail: "mcp"})
 	sess := s.shield.Session(sessionID(r))
 	res, err := t.run(ctx, toolCtx{store: s.store, sess: sess, company: company}, p.Arguments)
 	if err != nil {

@@ -63,6 +63,9 @@ func (s *Store) CreateInvoice(ctx context.Context, companyID, counterpartyID uui
 			return uuid.Nil, fmt.Errorf("store: insert invoice line: %w", err)
 		}
 	}
+	if err := s.logAudit(ctx, qtx, companyID, "create_invoice", "invoice", row.ID.String(), inv.Total().String()); err != nil {
+		return uuid.Nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return uuid.Nil, err
 	}
@@ -117,6 +120,9 @@ func (s *Store) FinalizeInvoice(ctx context.Context, companyID, invoiceID uuid.U
 		CompanyID:      companyID,
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("store: finalize invoice: %w", err)
+	}
+	if err := s.logAudit(ctx, qtx, companyID, "finalize_invoice", "invoice", invoiceID.String(), number+" "+inv.Total().String()); err != nil {
+		return uuid.Nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return uuid.Nil, err

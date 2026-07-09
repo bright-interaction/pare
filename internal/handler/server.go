@@ -70,8 +70,14 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/invoices", s.handleInvoiceCreate)
 			r.Post("/invoices/{id}/finalize", s.handleInvoiceFinalize)
 			r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
+			r.Get("/verifications", s.handleVerifications)
+			r.Post("/verifications", s.handlePostVerification)
+			r.Post("/verifications/{id}/undo", s.handleUndo)
 			r.Get("/reports", s.handleReports)
 			r.Get("/sie", s.handleSIE)
+			r.Get("/logg", s.handleLogg)
+			r.Post("/lock", s.handleLock)
+			r.Post("/unlock", s.handleUnlock)
 		})
 	}
 

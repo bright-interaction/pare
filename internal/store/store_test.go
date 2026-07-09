@@ -47,8 +47,8 @@ func TestBootstrapAndPost(t *testing.T) {
 
 	sale := []ledger.Line{
 		{Account: "1930", Debit: ledger.SEK(12500, 0)},
-		{Account: "3011", Credit: ledger.SEK(10000, 0), VATCode: "MP1"},
-		{Account: "2610", Credit: ledger.SEK(2500, 0)},
+		{Account: "3001", Credit: ledger.SEK(10000, 0), VATCode: "SE25"},
+		{Account: "2611", Credit: ledger.SEK(2500, 0)},
 	}
 	verID, err := s.PostVerification(ctx, co, "A", day("2026-01-15"), "Konsultarvode", sale, uuid.Nil)
 	if err != nil {
