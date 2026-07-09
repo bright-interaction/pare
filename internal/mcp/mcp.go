@@ -105,6 +105,24 @@ func (s *Server) add(t tool) {
 	s.order = append(s.order, t.name)
 }
 
+// ToolDoc is public metadata for one MCP tool, for generated API docs.
+type ToolDoc struct {
+	Name  string
+	Desc  string
+	Write bool
+}
+
+// ToolDocs returns the registered tools in order, for the /api documentation
+// page (always accurate because it reflects the live tool set).
+func (s *Server) ToolDocs() []ToolDoc {
+	out := make([]ToolDoc, 0, len(s.order))
+	for _, name := range s.order {
+		t := s.tools[name]
+		out = append(out, ToolDoc{Name: t.name, Desc: t.desc, Write: t.write})
+	}
+	return out
+}
+
 type rpcReq struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`

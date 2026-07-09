@@ -24,6 +24,7 @@ import (
 	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/invoice"
 	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/brightinteraction/pare/internal/mcp"
 	"github.com/brightinteraction/pare/internal/moms"
 	"github.com/brightinteraction/pare/internal/sie"
 	"github.com/brightinteraction/pare/internal/store"
@@ -1070,6 +1071,26 @@ func (s *Server) handleSIE(w http.ResponseWriter, r *http.Request) {
 	if err := exp.Write(w); err != nil {
 		slog.Error("sie write", "err", err)
 	}
+}
+
+func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
+	render(w, "hjalp", s.base(r, "Hjälp"), http.StatusOK)
+}
+
+type apiData struct {
+	Enabled bool
+	Tools   []mcp.ToolDoc
+}
+
+func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	pd := s.base(r, "API och integrationer")
+	d := apiData{}
+	if s.MCP != nil {
+		d.Enabled = true
+		d.Tools = s.MCP.ToolDocs()
+	}
+	pd.Data = d
+	render(w, "api", pd, http.StatusOK)
 }
 
 func (s *Server) handleFiscalYears(w http.ResponseWriter, r *http.Request) {

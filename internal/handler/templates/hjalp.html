@@ -1,0 +1,41 @@
+{{define "content"}}
+<h1>Hjälp och kom-igång</h1>
+<p class="muted" style="max-width:680px">Pare är ett lean bokföringsprogram med dubbel bokföring på BAS-kontoplanen, moms, SIE och en MCP så att en AI-assistent kan sköta böckerna åt dig. Här är de vanligaste flödena.</p>
+
+<h2>1. Kom igång</h2>
+<ul>
+  <li>Fyll i företagsuppgifter under <a href="/settings">Företag</a> (momsregnr, adress, bankgiro/IBAN) så att fakturorna blir giltiga.</li>
+  <li>Har du redan böcker i Fortnox eller Visma? Importera en SIE-fil under <a href="/reports">Rapporter</a> för att få in ingående balans och verifikat.</li>
+</ul>
+
+<h2>2. Fakturera en kund</h2>
+<ol>
+  <li>Lägg till kunden under <a href="/counterparties">Kunder</a>.</li>
+  <li>Skapa en faktura under <a href="/invoices">Fakturor</a> och slutför den. Då bokförs automatiskt ett verifikat (kundfordran, försäljning, utgående moms).</li>
+  <li>Skicka fakturan som PDF till kunden med Skicka (kräver e-postadress på kunden och att e-post är konfigurerad).</li>
+</ol>
+
+<h2>3. Bokför en kostnad (leverantörsfaktura)</h2>
+<ol>
+  <li>Under <a href="/supplier-invoices">Kostnader</a>: välj leverantör, belopp och momsbehandling. Vid köp av tjänst från utlandet (t.ex. Anthropic, EU-hosting) beräknas förvärvsmoms automatiskt.</li>
+  <li>Bokför fakturan och registrera betalning när den betalas.</li>
+</ol>
+
+<h2>4. När en betalning landar</h2>
+<ul>
+  <li>Vet du vilken faktura? Klicka Betala på fakturan. Pare bokför automatiskt mot rätt konto (kundfordran 1510, valutakursdifferens 3960/7960, öresavrundning 3740). Delbetalningar stöds.</li>
+  <li>Vet du bara beloppet? Skriv in det i "Matcha inbetalning" på <a href="/invoices">Fakturor</a> så markeras rätt faktura.</li>
+</ul>
+
+<h2>5. Moms och rapporter</h2>
+<ul>
+  <li><a href="/reports">Rapporter</a>: resultat- och balansräkning samt momsdeklaration för en vald period. Exportera SIE eller CSV till din revisor.</li>
+  <li><a href="/reskontra">Reskontra</a>: vem som är skyldig dig pengar (åldrat) och vad du är skyldig leverantörer.</li>
+</ul>
+
+<h2>6. Bokslut</h2>
+<p>När räkenskapsåret är klart, stäng det under <a href="/bokslut">Bokslut</a>. Årets resultat bokförs till eget kapital och perioden låses. Revisorn gör den formella dispositionen.</p>
+
+<h2>7. AI-assistent (MCP)</h2>
+<p>Pare exponerar ett MCP-API så att Claude kan läsa och bokföra åt dig, utan att kundernas identiteter någonsin lämnar programmet i klartext. Se <a href="/api">API och integrationer</a>.</p>
+{{end}}

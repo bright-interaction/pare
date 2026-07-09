@@ -118,6 +118,8 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/settings", s.handleSettings)
 				r.Post("/settings", s.handleSettingsSave)
 				r.Post("/users", s.handleInviteUser)
+				r.Get("/hjalp", s.handleHelp)
+				r.Get("/api", s.handleAPI)
 			})
 		})
 	}
