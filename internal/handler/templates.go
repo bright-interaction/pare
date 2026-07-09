@@ -24,7 +24,7 @@ var funcs = template.FuncMap{
 
 var pages = func() map[string]*template.Template {
 	m := map[string]*template.Template{}
-	for _, p := range []string{"setup", "login", "dashboard", "counterparties", "invoices", "invoice_new", "verifikat", "reports", "logg"} {
+	for _, p := range []string{"setup", "login", "dashboard", "counterparties", "counterparty_edit", "invoices", "invoice_new", "pay", "verifikat", "reports", "logg"} {
 		m[p] = template.Must(template.New("").Funcs(funcs).ParseFS(tmplFS, "templates/layout.html", "templates/"+p+".html"))
 	}
 	return m
@@ -37,6 +37,7 @@ type pageData struct {
 	CompanyName string
 	Flash       string
 	Error       string
+	CSRF        string
 	Data        any
 }
 

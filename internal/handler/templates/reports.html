@@ -1,9 +1,55 @@
 {{define "content"}}
+{{$s := .Data.Statements}}
+{{$m := .Data.Moms}}
 <div class="toolbar"><h1 style="margin:0">Rapporter</h1><div><a class="btn secondary" href="/export.csv">CSV</a> <a class="btn" href="/sie">Exportera SIE</a></div></div>
+
+<div class="report-grid">
+  <section>
+    <h2>Resultaträkning</h2>
+    <table>
+      <tr><th>Konto</th><th class="num">Belopp</th></tr>
+      {{if $s.Income}}<tr class="grouprow"><td colspan="2">Rörelsens intäkter</td></tr>{{end}}
+      {{range $s.Income}}<tr><td>{{.Account}} {{.Name}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
+      {{if $s.Expenses}}<tr class="grouprow"><td colspan="2">Rörelsens kostnader</td></tr>{{end}}
+      {{range $s.Expenses}}<tr><td>{{.Account}} {{.Name}}</td><td class="num">-{{.Amount}}</td></tr>{{end}}
+      {{if $s.Financial}}<tr class="grouprow"><td colspan="2">Finansiella poster</td></tr>{{end}}
+      {{range $s.Financial}}<tr><td>{{.Account}} {{.Name}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
+      <tr class="totalrow"><td>Årets resultat</td><td class="num">{{$s.Result}}</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Balansräkning</h2>
+    <table>
+      <tr><th>Konto</th><th class="num">Belopp</th></tr>
+      <tr class="grouprow"><td colspan="2">Tillgångar</td></tr>
+      {{range $s.Assets}}<tr><td>{{.Account}} {{.Name}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
+      <tr class="subtotalrow"><td>Summa tillgångar</td><td class="num">{{$s.AssetTotal}}</td></tr>
+      <tr class="grouprow"><td colspan="2">Eget kapital</td></tr>
+      {{range $s.Equity}}<tr><td>{{.Account}} {{.Name}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
+      <tr class="grouprow"><td colspan="2">Skulder</td></tr>
+      {{range $s.Liabilities}}<tr><td>{{.Account}} {{.Name}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
+      <tr class="subtotalrow"><td>Summa eget kapital och skulder</td><td class="num">{{$s.AssetTotal}}</td></tr>
+    </table>
+  </section>
+</div>
+
+<h2>Momsdeklaration</h2>
+<table class="momstable">
+  <tr><td>05 Momspliktig försäljning (netto)</td><td class="num">{{$m.Box05}}</td></tr>
+  <tr><td>10 Utgående moms 25 %</td><td class="num">{{$m.Box10}}</td></tr>
+  <tr><td>11 Utgående moms 12 %</td><td class="num">{{$m.Box11}}</td></tr>
+  <tr><td>12 Utgående moms 6 %</td><td class="num">{{$m.Box12}}</td></tr>
+  <tr><td>30 Utgående moms omvänd skattskyldighet</td><td class="num">{{$m.Box30}}</td></tr>
+  <tr><td>39 Försäljning tjänster till EU (netto)</td><td class="num">{{$m.Box39}}</td></tr>
+  <tr><td>48 Ingående moms att dra av</td><td class="num">{{$m.Box48}}</td></tr>
+  <tr class="totalrow"><td>49 Moms att betala (+) eller få tillbaka (-)</td><td class="num">{{$m.Box49}}</td></tr>
+</table>
+
 <h2>Huvudbok (saldon)</h2>
 {{if .Data.Rows}}
 <table>
-  <tr><th>Konto</th><th class="num">Saldo</th></tr>
+  <tr><th>Konto</th><th class="num">Saldo (debet +)</th></tr>
   {{range .Data.Rows}}<tr><td>{{.Account}}</td><td class="num">{{.Net}}</td></tr>{{end}}
 </table>
 {{else}}<div class="empty">Inga verifikat än.</div>{{end}}

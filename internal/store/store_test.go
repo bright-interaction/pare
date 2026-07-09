@@ -93,6 +93,34 @@ func TestBootstrapAndPost(t *testing.T) {
 	}
 }
 
+func TestSyncChartBackfills(t *testing.T) {
+	s, pool := testStore(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	co, err := s.BootstrapCompany(ctx, "BI AB", "556000-0000")
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	// Simulate a company bootstrapped before the FX accounts existed.
+	if _, err := pool.Exec(ctx, "DELETE FROM accounts WHERE company_id=$1 AND number IN ('3960','7960')", co); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	if err := s.SyncChart(ctx); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+
+	accts, _ := s.ChartAccounts(ctx, co)
+	have := map[string]bool{}
+	for _, a := range accts {
+		have[a.Number] = true
+	}
+	if !have["3960"] || !have["7960"] {
+		t.Fatalf("FX accounts not backfilled: 3960=%v 7960=%v", have["3960"], have["7960"])
+	}
+}
+
 func TestCounterpartyEncryption(t *testing.T) {
 	s, pool := testStore(t)
 	defer pool.Close()

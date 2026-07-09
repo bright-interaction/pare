@@ -80,6 +80,32 @@ func (s *Store) BootstrapCompany(ctx context.Context, name, orgnr string) (uuid.
 	return co.ID, nil
 }
 
+// SyncChart upserts the CoreChart into every existing company, backfilling
+// accounts added to the chart after a company was bootstrapped (e.g. the
+// currency-difference accounts 3960/7960 needed for foreign-currency payments)
+// and refreshing renamed accounts. Idempotent; run once at startup so the
+// operator never has to touch the DB when the chart grows.
+func (s *Store) SyncChart(ctx context.Context) error {
+	companies, err := s.q.ListCompanies(ctx)
+	if err != nil {
+		return err
+	}
+	for _, co := range companies {
+		for _, a := range ledger.CoreChart {
+			if err := s.q.UpsertAccount(ctx, gen.UpsertAccountParams{
+				CompanyID:      co.ID,
+				Number:         a.Number,
+				Name:           a.Name,
+				Class:          kontoklass(a.Number),
+				DefaultVatCode: a.DefaultVATCode,
+			}); err != nil {
+				return fmt.Errorf("store: sync account %s for %s: %w", a.Number, co.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Store) companyDEK(ctx context.Context, companyID uuid.UUID) (*crypto.DEK, error) {
 	co, err := s.q.GetCompany(ctx, companyID)
 	if err != nil {
@@ -195,6 +221,7 @@ type Counterparty struct {
 	Personnummer string
 	Address      string
 	IBAN         string
+	Erased       bool // GDPR-erased: identity fields are tombstoned
 }
 
 // ErrForeignCompany guards against reading another company's counterparty.
@@ -261,7 +288,7 @@ func (s *Store) GetCounterparty(ctx context.Context, companyID, id uuid.UUID) (C
 		b, err := dek.DecryptField(v)
 		return string(b), err
 	}
-	out := Counterparty{ID: row.ID, Kind: row.Kind}
+	out := Counterparty{ID: row.ID, Kind: row.Kind, Erased: row.ErasedAt.Valid}
 	for _, f := range []struct {
 		enc string
 		dst *string

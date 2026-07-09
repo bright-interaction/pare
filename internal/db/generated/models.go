@@ -48,6 +48,7 @@ type Counterparty struct {
 	AddressEnc      string             `json:"address_enc"`
 	IbanEnc         string             `json:"iban_enc"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ErasedAt        pgtype.Timestamptz `json:"erased_at"`
 }
 
 type FiscalYear struct {
@@ -59,20 +60,22 @@ type FiscalYear struct {
 }
 
 type Invoice struct {
-	ID             uuid.UUID          `json:"id"`
-	CompanyID      uuid.UUID          `json:"company_id"`
-	CounterpartyID uuid.UUID          `json:"counterparty_id"`
-	Number         string             `json:"number"`
-	Status         string             `json:"status"`
-	InvoiceDate    pgtype.Date        `json:"invoice_date"`
-	DueDate        pgtype.Date        `json:"due_date"`
-	Currency       string             `json:"currency"`
-	Ocr            string             `json:"ocr"`
-	NoteEnc        string             `json:"note_enc"`
-	VerificationID pgtype.UUID        `json:"verification_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	FinalizedAt    pgtype.Timestamptz `json:"finalized_at"`
-	RatePpm        int64              `json:"rate_ppm"`
+	ID                    uuid.UUID          `json:"id"`
+	CompanyID             uuid.UUID          `json:"company_id"`
+	CounterpartyID        uuid.UUID          `json:"counterparty_id"`
+	Number                string             `json:"number"`
+	Status                string             `json:"status"`
+	InvoiceDate           pgtype.Date        `json:"invoice_date"`
+	DueDate               pgtype.Date        `json:"due_date"`
+	Currency              string             `json:"currency"`
+	Ocr                   string             `json:"ocr"`
+	NoteEnc               string             `json:"note_enc"`
+	VerificationID        pgtype.UUID        `json:"verification_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	FinalizedAt           pgtype.Timestamptz `json:"finalized_at"`
+	RatePpm               int64              `json:"rate_ppm"`
+	PaidAt                pgtype.Date        `json:"paid_at"`
+	PaymentVerificationID pgtype.UUID        `json:"payment_verification_id"`
 }
 
 type InvoiceLine struct {

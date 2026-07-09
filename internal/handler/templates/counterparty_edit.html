@@ -1,0 +1,31 @@
+{{define "content"}}
+{{$c := .Data}}
+<div class="toolbar"><h1 style="margin:0">Redigera {{if eq $c.Kind "supplier"}}leverantör{{else}}kund{{end}}</h1><a class="btn secondary" href="/counterparties">Tillbaka</a></div>
+
+<form method="post" action="/counterparties/{{$c.ID}}">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="row">
+    <div style="flex:0 0 200px"><label>Typ</label>
+      <select name="kind">
+        <option value="customer" {{if eq $c.Kind "customer"}}selected{{end}}>Kund</option>
+        <option value="supplier" {{if eq $c.Kind "supplier"}}selected{{end}}>Leverantör</option>
+      </select>
+    </div>
+    <div><label>Namn</label><input name="name" value="{{$c.Name}}" required></div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <div><label>Org.nr</label><input name="orgnr" value="{{$c.OrgNr}}"></div>
+    <div><label>Personnummer</label><input name="personnummer" value="{{$c.Personnummer}}"></div>
+  </div>
+  <label>Adress</label><input name="address" value="{{$c.Address}}">
+  <label>IBAN / Bankgiro</label><input name="iban" value="{{$c.IBAN}}">
+  <div style="margin-top:16px"><button class="btn" type="submit">Spara</button> <a class="btn secondary" href="/counterparties">Avbryt</a></div>
+</form>
+
+<h2>Radera personuppgifter (GDPR)</h2>
+<p class="muted" style="max-width:560px">Radering skrubbar identitetsfälten permanent (namn, org.nr, personnummer, adress, bankuppgifter). Bokförda verifikat och fakturor påverkas inte. Radering går bara när kunden inte förekommer på bokförda fakturor, eftersom räkenskapsinformation måste sparas i sju år enligt bokföringslagen. Radera först när lagringstiden löpt ut.</p>
+<form method="post" action="/counterparties/{{$c.ID}}/erase">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <button class="btn danger" type="submit">Radera identitetsuppgifter</button>
+</form>
+{{end}}

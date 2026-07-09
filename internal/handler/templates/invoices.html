@@ -11,7 +11,10 @@
     <td><span class="pill {{.Status}}">{{.Status}}</span></td>
     <td class="num">
       {{if eq .Status "draft"}}
-        <form method="post" action="/invoices/{{.ID}}/finalize" style="display:inline"><button class="btn small" type="submit">Slutför</button></form>
+        <form method="post" action="/invoices/{{.ID}}/finalize" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small" type="submit">Slutför</button></form>
+      {{else if eq .Status "finalized"}}
+        <a class="btn small" href="/invoices/{{.ID}}/pay">Betala</a>
+        <a class="btn small secondary" href="/invoices/{{.ID}}/pdf">PDF</a>
       {{else}}
         <a class="btn small secondary" href="/invoices/{{.ID}}/pdf">PDF</a>
       {{end}}

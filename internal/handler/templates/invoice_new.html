@@ -2,6 +2,7 @@
 <h1>Ny faktura</h1>
 {{if .Data}}
 <form method="post" action="/invoices">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
   <label>Kund</label>
   <select name="counterparty" required>{{range .Data}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
   <div class="row" style="margin-top:12px">

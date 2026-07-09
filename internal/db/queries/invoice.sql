@@ -10,6 +10,9 @@ VALUES ($1, $2, $3, $4, $5, $6);
 -- name: GetInvoice :one
 SELECT * FROM invoices WHERE id = $1;
 
+-- name: GetInvoiceByNumber :one
+SELECT * FROM invoices WHERE company_id = $1 AND number = $2;
+
 -- name: ListInvoiceLines :many
 SELECT * FROM invoice_lines WHERE invoice_id = $1 ORDER BY line_no;
 
@@ -21,3 +24,8 @@ UPDATE invoices
 SET status = 'finalized', number = $2, invoice_date = $3, due_date = $4,
     verification_id = $5, finalized_at = now()
 WHERE id = $1 AND company_id = $6 AND status = 'draft';
+
+-- name: MarkInvoicePaid :execrows
+UPDATE invoices
+SET status = 'paid', paid_at = $2, payment_verification_id = $3
+WHERE id = $1 AND company_id = $4 AND status = 'finalized';

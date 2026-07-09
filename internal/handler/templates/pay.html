@@ -1,0 +1,17 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Registrera betalning</h1>
+<p class="muted">Faktura {{$d.Number}} · {{$d.CustomerName}} · {{$d.Total}} {{$d.Currency}}{{if ne $d.Currency "SEK"}} ({{$d.TotalSEK}} SEK bokfört){{end}}</p>
+<form method="post" action="/invoices/{{$d.ID}}/pay">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="row">
+    <div><label>Betaldatum</label><input name="date" type="date" required></div>
+    <div><label>Mottaget belopp (SEK)</label><input name="amount" type="number" step="0.01" value="{{$d.TotalSEKInput}}" required></div>
+    <div><label>Konto</label>
+      <select name="account">{{range $d.BankAccounts}}<option value="{{.Number}}">{{.Number}} {{.Name}}</option>{{end}}</select>
+    </div>
+  </div>
+  <div style="margin-top:16px"><button class="btn" type="submit">Registrera betalning</button> <a class="btn secondary" href="/invoices">Avbryt</a></div>
+  {{if ne $d.Currency "SEK"}}<p class="muted" style="margin-top:12px">Skillnaden mot bokfört belopp bokförs som valutakursvinst (3960) eller valutakursförlust (7960).</p>{{end}}
+</form>
+{{end}}

@@ -85,6 +85,23 @@ func (s *Server) register() {
 		proto: &postResult{},
 		run:   runPostVerification,
 	})
+	s.add(tool{
+		name:  "pare_record_payment",
+		desc:  "Settle a finalized invoice: book the received amount to a bank account, clear Kundfordringar (1510), and post any currency difference (3960/7960). Reference the invoice by its number.",
+		write: true,
+		schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"invoice_number":   map[string]any{"type": "string", "description": "the finalized invoice's number, e.g. 2026-0001"},
+				"date":             map[string]any{"type": "string", "description": "payment date, YYYY-MM-DD"},
+				"received_sek_ore": map[string]any{"type": "integer", "description": "amount actually received, in öre (SEK). For a foreign-currency invoice this is the SEK that landed in the bank."},
+				"account":          map[string]any{"type": "string", "description": "bank account to debit; defaults to 1930"},
+			},
+			"required": []string{"invoice_number", "date", "received_sek_ore"},
+		},
+		proto: &paymentResult{},
+		run:   runRecordPayment,
+	})
 }
 
 func emptySchema() map[string]any {
@@ -146,6 +163,12 @@ type sieResult struct {
 
 type postResult struct {
 	VerificationID string `json:"verification_id"`
+	Ok             bool   `json:"ok"`
+}
+
+type paymentResult struct {
+	VerificationID string `json:"verification_id"`
+	InvoiceNumber  string `json:"invoice_number"`
 	Ok             bool   `json:"ok"`
 }
 
@@ -311,4 +334,29 @@ func runPostVerification(ctx context.Context, tc toolCtx, args json.RawMessage) 
 		return nil, err
 	}
 	return &postResult{VerificationID: verID.String(), Ok: true}, nil
+}
+
+func runRecordPayment(ctx context.Context, tc toolCtx, args json.RawMessage) (any, error) {
+	var in struct {
+		InvoiceNumber  string `json:"invoice_number"`
+		Date           string `json:"date"`
+		ReceivedSEKOre int64  `json:"received_sek_ore"`
+		Account        string `json:"account"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return nil, errInvalidArgs
+	}
+	date, err := time.Parse("2006-01-02", in.Date)
+	if err != nil {
+		return nil, errBadDate
+	}
+	account := in.Account
+	if account == "" {
+		account = "1930"
+	}
+	verID, err := tc.store.RecordPaymentByNumber(ctx, tc.company, in.InvoiceNumber, date, account, ledger.Amount(in.ReceivedSEKOre))
+	if err != nil {
+		return nil, err
+	}
+	return &paymentResult{VerificationID: verID.String(), InvoiceNumber: in.InvoiceNumber, Ok: true}, nil
 }

@@ -44,13 +44,16 @@ func marker(kind Kind, token string) string {
 	return "[shield:" + string(kind) + ":" + token + "]"
 }
 
-// tokenID derives a stable per-session token id from the value.
+// tokenID derives a stable per-session token id from the value. It takes 128
+// bits (32 hex chars) of the HMAC-SHA256: wide enough that collisions across a
+// company's counterparties are negligible and the token is not brute-forceable
+// back to a value even if the (non-secret) token were observed.
 func tokenID(sessionKey []byte, kind Kind, value string) string {
 	mac := hmac.New(sha256.New, sessionKey)
 	mac.Write([]byte(kind))
 	mac.Write([]byte{0})
 	mac.Write([]byte(value))
-	return "tok_" + hex.EncodeToString(mac.Sum(nil))[:12]
+	return "tok_" + hex.EncodeToString(mac.Sum(nil))[:32]
 }
 
 func deriveSessionKey(master []byte, sessionID string) []byte {
