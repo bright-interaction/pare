@@ -75,6 +75,7 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/verifications/{id}/undo", s.handleUndo)
 			r.Get("/reports", s.handleReports)
 			r.Get("/sie", s.handleSIE)
+			r.Get("/export.csv", s.handleCSV)
 			r.Get("/logg", s.handleLogg)
 			r.Post("/lock", s.handleLock)
 			r.Post("/unlock", s.handleUnlock)
