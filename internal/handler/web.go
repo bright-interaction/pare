@@ -8,6 +8,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"math"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/brightinteraction/pare/internal/auth"
+	"github.com/brightinteraction/pare/internal/email"
 	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/invoice"
 	"github.com/brightinteraction/pare/internal/ledger"
@@ -410,6 +412,7 @@ func (s *Server) handleCounterpartyUpdate(w http.ResponseWriter, r *http.Request
 		Personnummer: strings.TrimSpace(r.PostFormValue("personnummer")),
 		Address:      strings.TrimSpace(r.PostFormValue("address")),
 		IBAN:         strings.TrimSpace(r.PostFormValue("iban")),
+		Email:        strings.TrimSpace(r.PostFormValue("email")),
 	}
 	if cp.Name == "" {
 		http.Redirect(w, r, "/counterparties/"+id.String()+"/edit", http.StatusSeeOther)
@@ -471,6 +474,17 @@ func (s *Server) handleInvoices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := invoicesData{}
+	var flash string
+	switch r.URL.Query().Get("msg") {
+	case "sent":
+		flash = "E-post skickad."
+	case "nomail":
+		flash = "E-post är inte konfigurerad (PARE_SMTP_*). Ingen e-post skickades."
+	case "noemail":
+		flash = "Kunden saknar e-postadress. Lägg till den under Redigera."
+	case "mailfail":
+		flash = "E-post kunde inte skickas."
+	}
 	// Smart reconciliation: ?match=<kr> highlights open invoices whose
 	// outstanding balance equals an incoming payment.
 	if m := strings.TrimSpace(r.URL.Query().Get("match")); m != "" {
@@ -486,6 +500,7 @@ func (s *Server) handleInvoices(w http.ResponseWriter, r *http.Request) {
 	}
 	data.Invoices = inv
 	pd := s.base(r, "Fakturor")
+	pd.Flash = flash
 	pd.Data = data
 	render(w, "invoices", pd, http.StatusOK)
 }
@@ -586,6 +601,72 @@ func (s *Server) handleInvoiceCredit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/invoices", http.StatusSeeOther)
+}
+
+// emailInvoice renders the invoice PDF and mails it to the customer, with a
+// subject/intro that differ for a fresh send vs a payment reminder.
+func (s *Server) emailInvoice(w http.ResponseWriter, r *http.Request, reminder bool) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	co, ctx := companyID(r), r.Context()
+	v, err := s.Store.InvoiceForRender(ctx, co, id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if v.Status != "finalized" && v.Status != "paid" {
+		http.Redirect(w, r, "/invoices", http.StatusSeeOther)
+		return
+	}
+	if s.Mailer == nil || !s.Mailer.Enabled() {
+		http.Redirect(w, r, "/invoices?msg=nomail", http.StatusSeeOther)
+		return
+	}
+	if v.Customer.Email == "" {
+		http.Redirect(w, r, "/invoices?msg=noemail", http.StatusSeeOther)
+		return
+	}
+	pdf, err := s.Store.RenderInvoicePDF(ctx, s.Gotenberg, co, id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	name := html.EscapeString(v.Customer.Name)
+	amt := v.Total.String() + " " + v.Currency
+	var subject, htmlBody, textBody string
+	if reminder {
+		subject = "Påminnelse: faktura " + v.Number
+		htmlBody = "<p>Hej " + name + ",</p><p>Detta är en vänlig påminnelse om faktura " + v.Number + " på " + amt + " som förfaller " + dateStr(v.DueDate) + ". Bifogat finner du fakturan.</p><p>Vänliga hälsningar,<br>" + html.EscapeString(v.CompanyName) + "</p>"
+		textBody = "Hej,\n\nVänlig påminnelse om faktura " + v.Number + " på " + amt + " (förfaller " + dateStr(v.DueDate) + "). Fakturan bifogas.\n\n" + v.CompanyName
+	} else {
+		subject = "Faktura " + v.Number
+		htmlBody = "<p>Hej " + name + ",</p><p>Bifogat finner du faktura " + v.Number + " på " + amt + ", att betala senast " + dateStr(v.DueDate) + ".</p><p>Vänliga hälsningar,<br>" + html.EscapeString(v.CompanyName) + "</p>"
+		textBody = "Hej,\n\nBifogat finner du faktura " + v.Number + " på " + amt + " (förfaller " + dateStr(v.DueDate) + ").\n\n" + v.CompanyName
+	}
+	att := email.Attachment{Name: "faktura-" + v.Number + ".pdf", Mime: "application/pdf", Content: pdf}
+	if err := s.Mailer.Send(v.Customer.Email, subject, htmlBody, textBody, att); err != nil {
+		slog.Error("invoice email", "err", err)
+		flarereport.CaptureErr(err)
+		http.Redirect(w, r, "/invoices?msg=mailfail", http.StatusSeeOther)
+		return
+	}
+	action := "send_invoice"
+	if reminder {
+		action = "remind_invoice"
+	}
+	_ = s.Store.LogUserAction(ctx, co, action, "invoice", id.String(), v.Number)
+	http.Redirect(w, r, "/invoices?msg=sent", http.StatusSeeOther)
+}
+
+func (s *Server) handleInvoiceSend(w http.ResponseWriter, r *http.Request) {
+	s.emailInvoice(w, r, false)
+}
+
+func (s *Server) handleInvoiceRemind(w http.ResponseWriter, r *http.Request) {
+	s.emailInvoice(w, r, true)
 }
 
 func (s *Server) handleInvoicePDF(w http.ResponseWriter, r *http.Request) {
@@ -813,6 +894,14 @@ func (s *Server) handleSupplierPay(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.fail(w, err)
 	}
+}
+
+// dateStr formats a date as YYYY-MM-DD (empty for the zero value).
+func dateStr(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02")
 }
 
 // formDateOr parses a YYYY-MM-DD form value, falling back to def.

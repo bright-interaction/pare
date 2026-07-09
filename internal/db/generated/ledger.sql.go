@@ -31,7 +31,7 @@ func (q *Queries) CountRetainedInvoices(ctx context.Context, arg CountRetainedIn
 
 const eraseCounterparty = `-- name: EraseCounterparty :exec
 UPDATE counterparties
-SET name_enc = $3, orgnr_enc = '', personnummer_enc = '', address_enc = '', iban_enc = '',
+SET name_enc = $3, orgnr_enc = '', personnummer_enc = '', address_enc = '', iban_enc = '', email_enc = '',
     erased_at = now()
 WHERE id = $1 AND company_id = $2 AND erased_at IS NULL
 `
@@ -75,7 +75,7 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 }
 
 const getCounterparty = `-- name: GetCounterparty :one
-SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at FROM counterparties WHERE id = $1
+SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at, email_enc FROM counterparties WHERE id = $1
 `
 
 func (q *Queries) GetCounterparty(ctx context.Context, id uuid.UUID) (Counterparty, error) {
@@ -92,6 +92,7 @@ func (q *Queries) GetCounterparty(ctx context.Context, id uuid.UUID) (Counterpar
 		&i.IbanEnc,
 		&i.CreatedAt,
 		&i.ErasedAt,
+		&i.EmailEnc,
 	)
 	return i, err
 }
@@ -139,9 +140,9 @@ func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (C
 
 const insertCounterparty = `-- name: InsertCounterparty :one
 INSERT INTO counterparties
-    (company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at
+    (company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, email_enc)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at, email_enc
 `
 
 type InsertCounterpartyParams struct {
@@ -152,6 +153,7 @@ type InsertCounterpartyParams struct {
 	PersonnummerEnc string    `json:"personnummer_enc"`
 	AddressEnc      string    `json:"address_enc"`
 	IbanEnc         string    `json:"iban_enc"`
+	EmailEnc        string    `json:"email_enc"`
 }
 
 func (q *Queries) InsertCounterparty(ctx context.Context, arg InsertCounterpartyParams) (Counterparty, error) {
@@ -163,6 +165,7 @@ func (q *Queries) InsertCounterparty(ctx context.Context, arg InsertCounterparty
 		arg.PersonnummerEnc,
 		arg.AddressEnc,
 		arg.IbanEnc,
+		arg.EmailEnc,
 	)
 	var i Counterparty
 	err := row.Scan(
@@ -176,6 +179,7 @@ func (q *Queries) InsertCounterparty(ctx context.Context, arg InsertCounterparty
 		&i.IbanEnc,
 		&i.CreatedAt,
 		&i.ErasedAt,
+		&i.EmailEnc,
 	)
 	return i, err
 }
@@ -316,7 +320,7 @@ func (q *Queries) ListCompanies(ctx context.Context) ([]Company, error) {
 }
 
 const listCounterparties = `-- name: ListCounterparties :many
-SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at FROM counterparties WHERE company_id = $1 ORDER BY created_at
+SELECT id, company_id, kind, name_enc, orgnr_enc, personnummer_enc, address_enc, iban_enc, created_at, erased_at, email_enc FROM counterparties WHERE company_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListCounterparties(ctx context.Context, companyID uuid.UUID) ([]Counterparty, error) {
@@ -339,6 +343,7 @@ func (q *Queries) ListCounterparties(ctx context.Context, companyID uuid.UUID) (
 			&i.IbanEnc,
 			&i.CreatedAt,
 			&i.ErasedAt,
+			&i.EmailEnc,
 		); err != nil {
 			return nil, err
 		}
@@ -641,7 +646,7 @@ func (q *Queries) UpdateCompanyProfile(ctx context.Context, arg UpdateCompanyPro
 
 const updateCounterparty = `-- name: UpdateCounterparty :exec
 UPDATE counterparties
-SET kind = $3, name_enc = $4, orgnr_enc = $5, personnummer_enc = $6, address_enc = $7, iban_enc = $8
+SET kind = $3, name_enc = $4, orgnr_enc = $5, personnummer_enc = $6, address_enc = $7, iban_enc = $8, email_enc = $9
 WHERE id = $1 AND company_id = $2 AND erased_at IS NULL
 `
 
@@ -654,6 +659,7 @@ type UpdateCounterpartyParams struct {
 	PersonnummerEnc string    `json:"personnummer_enc"`
 	AddressEnc      string    `json:"address_enc"`
 	IbanEnc         string    `json:"iban_enc"`
+	EmailEnc        string    `json:"email_enc"`
 }
 
 func (q *Queries) UpdateCounterparty(ctx context.Context, arg UpdateCounterpartyParams) error {
@@ -666,6 +672,7 @@ func (q *Queries) UpdateCounterparty(ctx context.Context, arg UpdateCounterparty
 		arg.PersonnummerEnc,
 		arg.AddressEnc,
 		arg.IbanEnc,
+		arg.EmailEnc,
 	)
 	return err
 }

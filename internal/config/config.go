@@ -23,6 +23,9 @@ type Config struct {
 	MCPMaxOre    int64  // per-write ceiling for AI-posted amounts (öre; 0 = unlimited)
 	GotenbergURL string
 	LogLevel     string
+	// SMTP (optional): email is a no-op until PARE_SMTP_HOST + PARE_SMTP_FROM set.
+	SMTPHost, SMTPUser, SMTPPass, SMTPFrom, SMTPFromName, SMTPTLS string
+	SMTPPort                                                      int
 }
 
 // Load reads and validates configuration.
@@ -34,6 +37,13 @@ func Load() (*Config, error) {
 		MCPMaxOre:    envInt64("PARE_MCP_MAX_ORE", 50_000_000), // 500 000 SEK per AI write
 		GotenbergURL: env("PARE_GOTENBERG_URL", "http://gotenberg:3000"),
 		LogLevel:     env("PARE_LOG_LEVEL", "info"),
+		SMTPHost:     os.Getenv("PARE_SMTP_HOST"),
+		SMTPPort:     int(envInt64("PARE_SMTP_PORT", 587)),
+		SMTPUser:     os.Getenv("PARE_SMTP_USER"),
+		SMTPPass:     os.Getenv("PARE_SMTP_PASS"),
+		SMTPFrom:     os.Getenv("PARE_SMTP_FROM"),
+		SMTPFromName: env("PARE_SMTP_FROM_NAME", "Pare"),
+		SMTPTLS:      env("PARE_SMTP_TLS", "starttls"),
 	}
 	mk, err := key("PARE_MASTER_KEY", true)
 	if err != nil {

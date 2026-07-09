@@ -24,6 +24,8 @@
       {{else if eq .Status "finalized"}}
         <a class="btn small" href="/invoices/{{.ID}}/pay">Betala</a>
         <a class="btn small secondary" href="/invoices/{{.ID}}/pdf">PDF</a>
+        <form method="post" action="/invoices/{{.ID}}/send" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small secondary" type="submit">Skicka</button></form>
+        {{if .Overdue}}<form method="post" action="/invoices/{{.ID}}/remind" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small secondary" type="submit">Påminn</button></form>{{end}}
         <form method="post" action="/invoices/{{.ID}}/credit" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small secondary" type="submit">Kreditera</button></form>
       {{else if eq .Status "paid"}}
         <a class="btn small secondary" href="/invoices/{{.ID}}/pdf">PDF</a>

@@ -60,6 +60,7 @@ type Counterparty struct {
 	IbanEnc         string             `json:"iban_enc"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	ErasedAt        pgtype.Timestamptz `json:"erased_at"`
+	EmailEnc        string             `json:"email_enc"`
 }
 
 type FiscalYear struct {

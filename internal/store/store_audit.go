@@ -138,6 +138,12 @@ type AuditEntry struct {
 	Detail      string
 }
 
+// LogUserAction records an audit entry attributed to the current actor (from
+// context). For non-ledger actions like emailing an invoice.
+func (s *Store) LogUserAction(ctx context.Context, companyID uuid.UUID, action, targetType, targetID, detail string) error {
+	return s.logAudit(ctx, s.q, companyID, action, targetType, targetID, detail)
+}
+
 // ListAudit returns the most recent audit entries.
 func (s *Store) ListAudit(ctx context.Context, companyID uuid.UUID, limit int) ([]AuditEntry, error) {
 	rows, err := s.q.ListAuditLog(ctx, gen.ListAuditLogParams{CompanyID: companyID, Limit: int32(limit)})

@@ -47,8 +47,8 @@ func (s *Store) UpdateCounterparty(ctx context.Context, companyID, id uuid.UUID,
 		}
 		return dek.EncryptField([]byte(v))
 	}
-	fields := make([]string, 5)
-	for i, v := range []string{cp.Name, cp.OrgNr, cp.Personnummer, cp.Address, cp.IBAN} {
+	fields := make([]string, 6)
+	for i, v := range []string{cp.Name, cp.OrgNr, cp.Personnummer, cp.Address, cp.IBAN, cp.Email} {
 		e, err := enc(v)
 		if err != nil {
 			return err
@@ -68,6 +68,7 @@ func (s *Store) UpdateCounterparty(ctx context.Context, companyID, id uuid.UUID,
 		PersonnummerEnc: fields[2],
 		AddressEnc:      fields[3],
 		IbanEnc:         fields[4],
+		EmailEnc:        fields[5],
 	}); err != nil {
 		return err
 	}
