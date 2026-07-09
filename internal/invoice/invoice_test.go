@@ -34,6 +34,34 @@ func TestSingleLineVerification(t *testing.T) {
 	}
 }
 
+func TestForeignCurrencyBooksSEK(t *testing.T) {
+	// 1000.00 EUR net at 25%, rate 11.50 SEK/EUR (ppm 11_500_000)
+	inv := Invoice{Currency: "EUR", RatePPM: 11_500_000, Lines: []Line{
+		{Description: "Consulting", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(1000, 0), VATCode: moms.SE25},
+	}}
+	if inv.Net() != ledger.SEK(1000, 0) || inv.VAT() != ledger.SEK(250, 0) {
+		t.Fatalf("invoice-currency totals wrong: net=%s vat=%s", inv.Net(), inv.VAT())
+	}
+	v := ledger.Verification{Series: "F", Number: 1, Date: time.Now(), Lines: inv.VerificationLines()}
+	if err := v.Validate(); err != nil {
+		t.Fatalf("SEK verifikat unbalanced: %v", err)
+	}
+	bal := ledger.Balances([]ledger.Verification{v})
+	// net 1000 EUR -> 11 500 SEK; vat 250 EUR -> 2 875 SEK; gross 14 375 SEK
+	if bal["1510"] != ledger.SEK(14375, 0) {
+		t.Errorf("1510 = %s, want 14375,00", bal["1510"])
+	}
+	if bal["3001"] != -ledger.SEK(11500, 0) {
+		t.Errorf("3001 = %s, want -11500,00", bal["3001"])
+	}
+	if bal["2611"] != -ledger.SEK(2875, 0) {
+		t.Errorf("2611 = %s, want -2875,00", bal["2611"])
+	}
+	if inv.GrossSEK() != ledger.SEK(14375, 0) {
+		t.Errorf("GrossSEK = %s, want 14375,00", inv.GrossSEK())
+	}
+}
+
 func TestMixedRatesBalance(t *testing.T) {
 	inv := Invoice{
 		Lines: []Line{

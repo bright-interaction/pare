@@ -35,7 +35,9 @@ type InvoiceSummary struct {
 	Number        string
 	CustomerName  string
 	CustomerOrgNr string
-	Total         ledger.Amount
+	Total         ledger.Amount // in the invoice currency
+	Currency      string
+	TotalSEK      ledger.Amount // booked to Kundfordringar in SEK
 	DueDate       string
 	Status        string
 }
@@ -61,6 +63,8 @@ func (s *Store) UnpaidInvoices(ctx context.Context, companyID uuid.UUID) ([]Invo
 			CustomerName:  v.Customer.Name,
 			CustomerOrgNr: v.Customer.OrgNr,
 			Total:         v.Total,
+			Currency:      v.Currency,
+			TotalSEK:      v.TotalSEK,
 			DueDate:       fmtDate(v.DueDate),
 			Status:        in.Status,
 		})

@@ -113,7 +113,9 @@ type unpaidRow struct {
 	Number   string `json:"number"`
 	Customer string `json:"customer" shield:"tokenize,kind=name"`
 	Orgnr    string `json:"customer_orgnr" shield:"tokenize,kind=orgnr"`
-	TotalKr  string `json:"total_kr"`
+	Total    string `json:"total"`
+	Currency string `json:"currency"`
+	TotalSEK string `json:"total_sek"`
 	DueDate  string `json:"due_date"`
 }
 
@@ -184,7 +186,7 @@ func runOverview(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error
 	}
 	var unpaidTotal ledger.Amount
 	for _, u := range unpaid {
-		unpaidTotal += u.Total
+		unpaidTotal += u.TotalSEK
 	}
 	return &overviewResult{
 		ResultKr:       (-result).String(),
@@ -207,7 +209,9 @@ func runUnpaid(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) 
 			Number:   u.Number,
 			Customer: u.CustomerName,
 			Orgnr:    u.CustomerOrgNr,
-			TotalKr:  u.Total.String(),
+			Total:    u.Total.String(),
+			Currency: u.Currency,
+			TotalSEK: u.TotalSEK.String(),
 			DueDate:  u.DueDate,
 		})
 	}

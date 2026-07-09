@@ -7,7 +7,7 @@
     <td>{{if .Number}}{{.Number}}{{else}}<span class="muted">utkast</span>{{end}}</td>
     <td>{{.CustomerName}}</td>
     <td>{{.DueDate}}</td>
-    <td class="num">{{.Total}}</td>
+    <td class="num">{{.Total}} {{.Currency}}</td>
     <td><span class="pill {{.Status}}">{{.Status}}</span></td>
     <td class="num">
       {{if eq .Status "draft"}}

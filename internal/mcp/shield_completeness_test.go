@@ -23,6 +23,7 @@ var safeFields = map[string]bool{
 	"box_12_output_6_kr": true, "box_30_reverse_charge_output_kr": true,
 	"box_39_eu_services_kr": true, "box_48_input_kr": true, "box_49_to_pay_kr": true,
 	"at": true, "actor": true, "action": true, "target": true, "detail": true,
+	"total": true, "currency": true, "total_sek": true,
 }
 
 func TestShieldCompleteness(t *testing.T) {
