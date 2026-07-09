@@ -74,6 +74,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Sweep expired sessions + stale shield tokens hourly (bounds tokenized-value
+	// lifetime, incl. GDPR-erased identities captured in old MCP sessions).
+	st.StartSweeper(ctx, time.Hour)
+
 	secureCookies := os.Getenv("PARE_INSECURE_COOKIES") != "1"
 	srv := &handler.Server{
 		Store:         st,

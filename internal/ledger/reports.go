@@ -88,9 +88,30 @@ type Statements struct {
 	LiabilityTotal Amount
 }
 
-// BuildStatements groups a trial balance into financial statements. nameFn
-// resolves an account number to its display name (pass nil to skip names).
+// ResultOf returns the profit/loss implied by a trial balance's result classes.
+func ResultOf(tb []AccountBalance) Amount {
+	var net Amount
+	for _, r := range tb {
+		if r.Class.IsResult() {
+			net += r.Net
+		}
+	}
+	return -net
+}
+
+// BuildStatements groups a single trial balance into financial statements
+// (resultaträkning + balansräkning from the same balances). nameFn resolves an
+// account number to its display name (pass nil to skip names).
 func BuildStatements(tb []AccountBalance, nameFn func(account string) string) Statements {
+	return BuildStatementsPeriod(tb, tb, ResultOf(tb), nameFn)
+}
+
+// BuildStatementsPeriod builds statements for a period: the resultaträkning
+// (income/expense/financial) comes from plTB (a period slice), the balansräkning
+// (assets/equity/liabilities) from bsTB (cumulative as of the period end), and
+// the synthetic "årets resultat" equity row from yearResult (the fiscal
+// year-to-date result), so the balance sheet balances as of the period end.
+func BuildStatementsPeriod(plTB, bsTB []AccountBalance, yearResult Amount, nameFn func(account string) string) Statements {
 	name := func(acc string) string {
 		if nameFn == nil {
 			return ""
@@ -98,22 +119,9 @@ func BuildStatements(tb []AccountBalance, nameFn func(account string) string) St
 		return nameFn(acc)
 	}
 	var s Statements
-	for _, r := range tb {
+	for _, r := range plTB {
 		row := StatementRow{Account: r.Account, Name: name(r.Account), Class: r.Class}
 		switch r.Class {
-		case ClassAsset: // debit-positive
-			row.Amount = r.Net
-			s.Assets = append(s.Assets, row)
-			s.AssetTotal += row.Amount
-		case ClassEquityLiability: // credit-positive
-			row.Amount = -r.Net
-			if strings.HasPrefix(r.Account, "20") { // eget kapital
-				s.Equity = append(s.Equity, row)
-				s.EquityTotal += row.Amount
-			} else { // skulder
-				s.Liabilities = append(s.Liabilities, row)
-				s.LiabilityTotal += row.Amount
-			}
 		case ClassIncome: // credit-positive
 			row.Amount = -r.Net
 			s.Income = append(s.Income, row)
@@ -130,14 +138,34 @@ func BuildStatements(tb []AccountBalance, nameFn func(account string) string) St
 	}
 	s.Result = s.IncomeTotal - s.ExpenseTotal + s.FinancialTotal
 
-	// Fold the live result into equity so the balansräkning balances. Not a
-	// posted account: it is the calculated result before year-end close.
-	if s.Result != 0 {
+	for _, r := range bsTB {
+		row := StatementRow{Account: r.Account, Name: name(r.Account), Class: r.Class}
+		switch r.Class {
+		case ClassAsset: // debit-positive
+			row.Amount = r.Net
+			s.Assets = append(s.Assets, row)
+			s.AssetTotal += row.Amount
+		case ClassEquityLiability: // credit-positive
+			row.Amount = -r.Net
+			if strings.HasPrefix(r.Account, "20") { // eget kapital
+				s.Equity = append(s.Equity, row)
+				s.EquityTotal += row.Amount
+			} else { // skulder
+				s.Liabilities = append(s.Liabilities, row)
+				s.LiabilityTotal += row.Amount
+			}
+		}
+	}
+
+	// Fold the fiscal year-to-date result into equity so the balansräkning
+	// balances. Not a posted account: it is the calculated result before
+	// year-end close.
+	if yearResult != 0 {
 		s.Equity = append(s.Equity, StatementRow{
 			Account: "", Name: "Årets resultat (beräknat)",
-			Class: ClassEquityLiability, Amount: s.Result,
+			Class: ClassEquityLiability, Amount: yearResult,
 		})
-		s.EquityTotal += s.Result
+		s.EquityTotal += yearResult
 	}
 	return s
 }

@@ -35,6 +35,8 @@ type Invoice struct {
 	VATKr            string
 	TotalKr          string
 	Currency         string
+	IsCredit         bool
+	CreditsNumber    string
 }
 
 // InvoiceLine is one pre-formatted row.
@@ -80,8 +82,9 @@ var invoiceTmpl = template.Must(template.New("invoice").Parse(`<!doctype html>
 </style></head><body>
   <div class="head">
     <div>
-      <p class="title">Faktura</p>
+      <p class="title">{{if .IsCredit}}Kreditfaktura{{else}}Faktura{{end}}</p>
       <div class="muted">Nr {{.Number}}</div>
+      {{if .IsCredit}}<div class="muted">Avser faktura {{.CreditsNumber}}</div>{{end}}
     </div>
     <table class="meta">
       <tr><td>Fakturadatum</td><td>{{.Date}}</td></tr>

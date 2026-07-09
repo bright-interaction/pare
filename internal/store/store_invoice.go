@@ -201,6 +201,99 @@ func (s *Store) ExportSIE(ctx context.Context, companyID uuid.UUID, generated ti
 	return exp, nil
 }
 
+// DeleteDraftInvoice removes a draft invoice (and its lines, via cascade). Only
+// drafts can be deleted; finalized invoices are immutable accounting records.
+func (s *Store) DeleteDraftInvoice(ctx context.Context, companyID, invoiceID uuid.UUID) error {
+	n, err := s.q.DeleteDraftInvoice(ctx, gen.DeleteDraftInvoiceParams{ID: invoiceID, CompanyID: companyID})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotDraft
+	}
+	return s.logAudit(ctx, s.q, companyID, "delete_draft_invoice", "invoice", invoiceID.String(), "")
+}
+
+// CreditInvoice issues a kreditfaktura for a finalized invoice: it creates a new
+// invoice whose lines negate the original, finalizes it (posting a reversing
+// verifikat), links it to the original, and marks the original cancelled. Returns
+// the credit note's id and number.
+func (s *Store) CreditInvoice(ctx context.Context, companyID, invoiceID uuid.UUID) (uuid.UUID, string, error) {
+	orig, err := s.q.GetInvoice(ctx, invoiceID)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if orig.CompanyID != companyID {
+		return uuid.Nil, "", ErrForeignCompany
+	}
+	if orig.Status != "finalized" {
+		return uuid.Nil, "", ErrNotFinalized
+	}
+	origLines, err := s.q.ListInvoiceLines(ctx, invoiceID)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	// The credit-note invoice row carries the same (positive) lines so its PDF
+	// shows the credited amounts; it is labelled Kreditfaktura via credits_invoice_id.
+	credit := invoice.Invoice{Currency: orig.Currency, RatePPM: orig.RatePpm}
+	for _, r := range origLines {
+		credit.Lines = append(credit.Lines, invoice.Line{
+			Description:   r.Description,
+			QuantityMilli: r.QuantityMilli,
+			UnitPriceOre:  ledger.Amount(r.UnitPriceOre),
+			VATCode:       moms.Code(r.VatCode),
+		})
+	}
+	creditID, err := s.CreateInvoice(ctx, companyID, orig.CounterpartyID, credit)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if err := s.q.SetInvoiceCredits(ctx, gen.SetInvoiceCreditsParams{ID: creditID, CreditsInvoiceID: pgUUID(invoiceID)}); err != nil {
+		return uuid.Nil, "", err
+	}
+
+	// The credit-note verifikat REVERSES the original's (swap debit/credit, all
+	// amounts stay non-negative), so the books return to their pre-invoice state.
+	origVerLines, err := s.q.ListVerificationLinesByVerification(ctx, uuidFromPg(orig.VerificationID))
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	revLines := make([]ledger.Line, 0, len(origVerLines))
+	for _, l := range origVerLines {
+		revLines = append(revLines, ledger.Line{
+			Account: l.Account, Debit: ledger.Amount(l.CreditOre), Credit: ledger.Amount(l.DebitOre), VATCode: l.VatCode,
+		})
+	}
+
+	date := time.Now()
+	var number string
+	err = s.inTx(ctx, func(qtx *gen.Queries) error {
+		seq, err := qtx.AllocInvoiceNumber(ctx, gen.AllocInvoiceNumberParams{CompanyID: companyID, Year: int32(date.Year())})
+		if err != nil {
+			return err
+		}
+		number = fmt.Sprintf("%d-%04d", date.Year(), seq)
+		verID, err := s.postVerification(ctx, qtx, companyID, "F", date, "Kreditfaktura "+number+" avser "+orig.Number, revLines, uuidFromPg(orig.VerificationID))
+		if err != nil {
+			return err
+		}
+		if err := qtx.FinalizeInvoice(ctx, gen.FinalizeInvoiceParams{
+			ID: creditID, Number: number, InvoiceDate: pgDate(date), DueDate: pgDateOrNull(date),
+			VerificationID: pgUUID(verID), CompanyID: companyID,
+		}); err != nil {
+			return err
+		}
+		if _, err := qtx.MarkInvoiceCancelled(ctx, gen.MarkInvoiceCancelledParams{ID: invoiceID, CompanyID: companyID}); err != nil {
+			return err
+		}
+		return s.logAudit(ctx, qtx, companyID, "credit_invoice", "invoice", invoiceID.String(), "kreditfaktura "+number)
+	})
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	return creditID, number, nil
+}
+
 // InvoiceView is a fully-resolved invoice for rendering (customer decrypted,
 // amounts computed). It is what the PDF template and the operator UI consume.
 type InvoiceView struct {
@@ -226,6 +319,8 @@ type InvoiceView struct {
 	Currency         string
 	TotalSEK         ledger.Amount // gross booked to Kundfordringar in SEK
 	OCR              string
+	IsCredit         bool   // this invoice is a kreditfaktura
+	CreditsNumber    string // the original invoice number it credits
 }
 
 // VATSummaryRow is one row of the per-rate VAT breakout required on a faktura.
@@ -321,6 +416,12 @@ func (s *Store) InvoiceForRender(ctx context.Context, companyID, invoiceID uuid.
 	}
 	view.Total = view.Net + view.VAT
 	view.TotalSEK = inv.GrossSEK()
+	if dbInv.CreditsInvoiceID.Valid {
+		view.IsCredit = true
+		if orig, err := s.q.GetInvoice(ctx, uuidFromPg(dbInv.CreditsInvoiceID)); err == nil {
+			view.CreditsNumber = orig.Number
+		}
+	}
 	return view, nil
 }
 
@@ -347,6 +448,8 @@ func (s *Store) RenderInvoicePDF(ctx context.Context, g *render.Gotenberg, compa
 		CustomerAddress:  v.Customer.Address,
 		OCR:              v.OCR,
 		Currency:         v.Currency,
+		IsCredit:         v.IsCredit,
+		CreditsNumber:    v.CreditsNumber,
 		LegalNotes:       v.LegalNotes,
 		NetKr:            v.Net.String(),
 		VATKr:            v.VAT.String(),

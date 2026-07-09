@@ -358,9 +358,13 @@ func (s *Server) handleCounterpartyErase(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleAddCounterparty(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	name := strings.TrimSpace(r.PostFormValue("name"))
+	kind := r.PostFormValue("kind")
+	if kind != "supplier" {
+		kind = "customer"
+	}
 	if name != "" {
 		if _, err := s.Store.CreateCounterparty(r.Context(), companyID(r), store.Counterparty{
-			Kind:  "customer",
+			Kind:  kind,
 			Name:  name,
 			OrgNr: strings.TrimSpace(r.PostFormValue("orgnr")),
 		}); err != nil {
@@ -444,6 +448,36 @@ func (s *Server) handleInvoiceFinalize(w http.ResponseWriter, r *http.Request) {
 	}
 	co := companyID(r)
 	if _, _, err := s.Store.FinalizeInvoice(r.Context(), co, id, time.Now(), time.Now().AddDate(0, 0, 30)); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/invoices", http.StatusSeeOther)
+}
+
+func (s *Server) handleInvoiceDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.Store.DeleteDraftInvoice(r.Context(), companyID(r), id); err != nil && !errors.Is(err, store.ErrNotDraft) {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/invoices", http.StatusSeeOther)
+}
+
+func (s *Server) handleInvoiceCredit(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, _, err := s.Store.CreditInvoice(r.Context(), companyID(r), id); err != nil {
+		if errors.Is(err, store.ErrNotFinalized) {
+			http.Redirect(w, r, "/invoices", http.StatusSeeOther)
+			return
+		}
 		s.fail(w, err)
 		return
 	}
@@ -689,30 +723,54 @@ type reportsData struct {
 	Statements ledger.Statements
 	Moms       moms.Declaration
 	Rows       []ledger.AccountBalance
+	From       string
+	To         string
 }
 
 func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 	co, ctx := companyID(r), r.Context()
-	tb, err := s.Store.TrialBalance(ctx, co)
+
+	// Period defaults to the fiscal year to date (Jan 1 of `to`'s year -> today).
+	to := formDateOr(r.URL.Query().Get("to"), time.Now())
+	yearStart := time.Date(to.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+	from := formDateOr(r.URL.Query().Get("from"), yearStart)
+
+	// Resultaträkning + moms over the chosen period; balansräkning as of the end.
+	periodTB, err := s.Store.TrialBalanceBetween(ctx, co, from, to)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	asOfTB, err := s.Store.TrialBalanceAsOf(ctx, co, to)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	// The equity "årets resultat" is the fiscal year-to-date result (year start
+	// -> period end), independent of a custom from-date.
+	yearTB, err := s.Store.TrialBalanceBetween(ctx, co, yearStart, to)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+
 	names := map[string]string{}
 	if accts, err := s.Store.ChartAccounts(ctx, co); err == nil {
 		for _, a := range accts {
 			names[a.Number] = a.Name
 		}
 	}
-	bal := make(map[string]ledger.Amount, len(tb))
-	for _, r := range tb {
+	bal := make(map[string]ledger.Amount, len(periodTB))
+	for _, r := range periodTB {
 		bal[r.Account] = r.Net
 	}
 	pd := s.base(r, "Rapporter")
 	pd.Data = reportsData{
-		Statements: ledger.BuildStatements(tb, func(a string) string { return names[a] }),
+		Statements: ledger.BuildStatementsPeriod(periodTB, asOfTB, ledger.ResultOf(yearTB), func(a string) string { return names[a] }),
 		Moms:       moms.Report(bal),
-		Rows:       tb,
+		Rows:       asOfTB,
+		From:       from.Format("2006-01-02"),
+		To:         to.Format("2006-01-02"),
 	}
 	render(w, "reports", pd, http.StatusOK)
 }
@@ -897,7 +955,7 @@ func (s *Server) handleLogg(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	entries, err := s.Store.ListAudit(ctx, co, 100)
+	entries, err := s.Store.ListAudit(ctx, co, 500)
 	if err != nil {
 		s.fail(w, err)
 		return

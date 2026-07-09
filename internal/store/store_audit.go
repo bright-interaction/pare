@@ -114,7 +114,15 @@ func (s *Store) ListAudit(ctx context.Context, companyID uuid.UUID, limit int) (
 	return out, nil
 }
 
-// VerificationSummary is a verifikat header for lists (undo UI, exports).
+// VerificationLineView is one posted line (for the readable verifikationslista).
+type VerificationLineView struct {
+	Account string
+	Debit   ledger.Amount
+	Credit  ledger.Amount
+}
+
+// VerificationSummary is a verifikat header (+ its lines) for lists and the
+// statutory readable-form verifikationslista.
 type VerificationSummary struct {
 	ID          uuid.UUID
 	Series      string
@@ -122,9 +130,11 @@ type VerificationSummary struct {
 	Date        string
 	Description string
 	IsReversal  bool
+	Lines       []VerificationLineView
 }
 
-// ListVerificationSummaries lists posted verifikat, newest date last.
+// ListVerificationSummaries lists posted verifikat with their transaction lines,
+// newest date last.
 func (s *Store) ListVerificationSummaries(ctx context.Context, companyID uuid.UUID) ([]VerificationSummary, error) {
 	vers, err := s.q.ListVerifications(ctx, companyID)
 	if err != nil {
@@ -132,14 +142,24 @@ func (s *Store) ListVerificationSummaries(ctx context.Context, companyID uuid.UU
 	}
 	out := make([]VerificationSummary, 0, len(vers))
 	for _, v := range vers {
-		out = append(out, VerificationSummary{
+		sum := VerificationSummary{
 			ID:          v.ID,
 			Series:      v.Series,
 			Number:      int(v.Number),
 			Date:        v.Vdate.Time.Format("2006-01-02"),
 			Description: v.Description,
 			IsReversal:  v.ReversalOf.Valid,
-		})
+		}
+		lineRows, err := s.q.ListVerificationLinesByVerification(ctx, v.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, l := range lineRows {
+			sum.Lines = append(sum.Lines, VerificationLineView{
+				Account: l.Account, Debit: ledger.Amount(l.DebitOre), Credit: ledger.Amount(l.CreditOre),
+			})
+		}
+		out = append(out, sum)
 	}
 	return out, nil
 }

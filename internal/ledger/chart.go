@@ -62,6 +62,8 @@ type Account struct {
 var CoreChart = []Account{
 	// Klass 1 Tillgångar
 	{"1510", "Kundfordringar", ""},
+	{"1630", "Avräkning för skatter och avgifter (skattekonto)", ""},
+	{"1790", "Övriga förutbetalda kostnader och upplupna intäkter", ""},
 	{"1910", "Kassa", ""},
 	{"1930", "Företagskonto/checkkonto/affärskonto", ""},
 	// Klass 2 Eget kapital och skulder
@@ -78,12 +80,15 @@ var CoreChart = []Account{
 	{"2641", "Debiterad ingående moms", ""},
 	{"2645", "Beräknad ingående moms på förvärv från utlandet", ""},
 	{"2650", "Redovisningskonto för moms", ""},
+	{"2710", "Personalskatt", ""},
+	{"2990", "Övriga upplupna kostnader och förutbetalda intäkter", ""},
 	// Klass 3 Rörelsens intäkter
 	{"3001", "Försäljning inom Sverige, 25 % moms", "SE25"},
 	{"3002", "Försäljning inom Sverige, 12 % moms", "SE12"},
 	{"3003", "Försäljning inom Sverige, 6 % moms", "SE06"},
 	{"3305", "Försäljning tjänster till land utanför EU", "EXP"},
 	{"3308", "Försäljning tjänster till annat EU-land", "RCEU"},
+	{"3740", "Öres- och kronutjämning", ""},
 	{"3960", "Valutakursvinster på fordringar och skulder av rörelsekaraktär", ""},
 	// Klass 4 Kostnader för varor och köpta tjänster
 	{"4531", "Inköp av tjänster från ett land utanför EU, 25 % moms", ""},

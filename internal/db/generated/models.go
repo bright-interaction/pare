@@ -85,6 +85,7 @@ type Invoice struct {
 	RatePpm               int64              `json:"rate_ppm"`
 	PaidAt                pgtype.Date        `json:"paid_at"`
 	PaymentVerificationID pgtype.UUID        `json:"payment_verification_id"`
+	CreditsInvoiceID      pgtype.UUID        `json:"credits_invoice_id"`
 }
 
 type InvoiceLine struct {

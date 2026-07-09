@@ -18,7 +18,6 @@ type Config struct {
 	DatabaseURL  string
 	MasterKey    []byte // PARE_MASTER_KEY, 32 bytes, wraps per-company DEKs
 	ShieldKey    []byte // PARE_SHIELD_KEY, 32 bytes, optional (MCP boundary)
-	ShieldHint   string
 	MCPKey       string // PARE_MCP_KEY, gates the MCP endpoint (optional)
 	GotenbergURL string
 	LogLevel     string
@@ -29,7 +28,6 @@ func Load() (*Config, error) {
 	c := &Config{
 		Addr:         env("PARE_ADDR", ":8080"),
 		DatabaseURL:  os.Getenv("PARE_DATABASE_URL"),
-		ShieldHint:   env("PARE_SHIELD_HINT_LEVEL", "bucketed"),
 		MCPKey:       os.Getenv("PARE_MCP_KEY"),
 		GotenbergURL: env("PARE_GOTENBERG_URL", "http://gotenberg:3000"),
 		LogLevel:     env("PARE_LOG_LEVEL", "info"),

@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -101,6 +102,7 @@ func (s *Store) ListInvoiceSummaries(ctx context.Context, companyID uuid.UUID) (
 		if err != nil {
 			return nil, err
 		}
+		overdue := in.Status == "finalized" && !v.DueDate.IsZero() && v.DueDate.Before(time.Now().Truncate(24*time.Hour))
 		out = append(out, InvoiceSummary{
 			ID:            in.ID,
 			Number:        v.Number,
@@ -111,6 +113,7 @@ func (s *Store) ListInvoiceSummaries(ctx context.Context, companyID uuid.UUID) (
 			TotalSEK:      v.TotalSEK,
 			DueDate:       fmtDate(v.DueDate),
 			Status:        in.Status,
+			Overdue:       overdue,
 		})
 	}
 	return out, nil

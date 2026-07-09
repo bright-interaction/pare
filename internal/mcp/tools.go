@@ -33,15 +33,15 @@ func (s *Server) register() {
 	})
 	s.add(tool{
 		name:   "pare_trial_balance",
-		desc:   "Per-account net balances (huvudbok summary) for the active company. Account codes and amounts only.",
-		schema: emptySchema(),
+		desc:   "Per-account net balances (huvudbok summary). Optional from/to (YYYY-MM-DD) scope it to a period; omit for all time. Account codes and amounts only.",
+		schema: periodSchema(),
 		proto:  &trialBalanceResult{},
 		run:    runTrialBalance,
 	})
 	s.add(tool{
 		name:   "pare_moms_report",
-		desc:   "The momsdeklaration boxes (rutor) for the active company's posted vouchers.",
-		schema: emptySchema(),
+		desc:   "The momsdeklaration boxes (rutor). Optional from/to (YYYY-MM-DD) scope it to a filing period (recommended); omit for all time.",
+		schema: periodSchema(),
 		proto:  &momsResult{},
 		run:    runMoms,
 	})
@@ -106,6 +106,43 @@ func (s *Server) register() {
 
 func emptySchema() map[string]any {
 	return map[string]any{"type": "object", "properties": map[string]any{}}
+}
+
+func periodSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"from": map[string]any{"type": "string", "description": "period start, YYYY-MM-DD (optional)"},
+			"to":   map[string]any{"type": "string", "description": "period end, YYYY-MM-DD (optional)"},
+		},
+	}
+}
+
+// periodBalances returns account balances scoped to an optional [from,to] period
+// (all time when both are empty). Bad dates fall back to all time.
+func periodBalances(ctx context.Context, tc toolCtx, args json.RawMessage) (map[string]ledger.Amount, []ledger.AccountBalance, error) {
+	var in struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	_ = json.Unmarshal(args, &in)
+	from, ferr := time.Parse("2006-01-02", in.From)
+	to, terr := time.Parse("2006-01-02", in.To)
+	var tb []ledger.AccountBalance
+	var err error
+	if ferr == nil && terr == nil {
+		tb, err = tc.store.TrialBalanceBetween(ctx, tc.company, from, to)
+	} else {
+		tb, err = tc.store.TrialBalance(ctx, tc.company)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	bal := make(map[string]ledger.Amount, len(tb))
+	for _, r := range tb {
+		bal[r.Account] = r.Net
+	}
+	return bal, tb, nil
 }
 
 // --- result types (json names are checked by shield_completeness_test) ---
@@ -242,8 +279,8 @@ func runUnpaid(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) 
 	return res, nil
 }
 
-func runTrialBalance(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) {
-	tb, err := tc.store.TrialBalance(ctx, tc.company)
+func runTrialBalance(ctx context.Context, tc toolCtx, args json.RawMessage) (any, error) {
+	_, tb, err := periodBalances(ctx, tc, args)
 	if err != nil {
 		return nil, err
 	}
@@ -257,8 +294,8 @@ func runTrialBalance(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, e
 	return res, nil
 }
 
-func runMoms(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) {
-	bal, err := tc.store.BalancesMap(ctx, tc.company)
+func runMoms(ctx context.Context, tc toolCtx, args json.RawMessage) (any, error) {
+	bal, _, err := periodBalances(ctx, tc, args)
 	if err != nil {
 		return nil, err
 	}

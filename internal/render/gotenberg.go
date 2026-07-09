@@ -63,8 +63,8 @@ func (g *Gotenberg) HTMLToPDF(ctx context.Context, html string) ([]byte, error) 
 		return nil, err
 	}
 	_ = mw.WriteField("paperWidth", "8.27")   // A4 inches
-	_ = mw.WriteField("paperHeight", "11.69")  // A4 inches
-	_ = mw.WriteField("marginTop", "0.59")     // ~15mm
+	_ = mw.WriteField("paperHeight", "11.69") // A4 inches
+	_ = mw.WriteField("marginTop", "0.59")    // ~15mm
 	_ = mw.WriteField("marginBottom", "0.59")
 	_ = mw.WriteField("marginLeft", "0.59")
 	_ = mw.WriteField("marginRight", "0.59")

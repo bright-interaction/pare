@@ -84,6 +84,8 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/invoices/new", s.handleInvoiceNew)
 				r.Post("/invoices", s.handleInvoiceCreate)
 				r.Post("/invoices/{id}/finalize", s.handleInvoiceFinalize)
+				r.Post("/invoices/{id}/delete", s.handleInvoiceDelete)
+				r.Post("/invoices/{id}/credit", s.handleInvoiceCredit)
 				r.Get("/invoices/{id}/pay", s.handlePayForm)
 				r.Post("/invoices/{id}/pay", s.handlePay)
 				r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
