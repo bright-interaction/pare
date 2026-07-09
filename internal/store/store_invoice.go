@@ -193,10 +193,37 @@ func (s *Store) ExportSIE(ctx context.Context, companyID uuid.UUID, generated ti
 			Lines:  byVer[v.ID],
 		})
 	}
+	y := generated.Year()
 	if len(vers) > 0 {
-		y := vers[0].Vdate.Time.Year()
-		exp.YearStart = time.Date(y, 1, 1, 0, 0, 0, 0, time.UTC)
-		exp.YearEnd = time.Date(y, 12, 31, 0, 0, 0, 0, time.UTC)
+		y = vers[0].Vdate.Time.Year()
+	}
+	yearStart := time.Date(y, 1, 1, 0, 0, 0, 0, time.UTC)
+	yearEnd := time.Date(y, 12, 31, 0, 0, 0, 0, time.UTC)
+	exp.YearStart = yearStart
+	exp.YearEnd = yearEnd
+
+	// #IB (opening = balance accounts carried in before the year), #UB (closing =
+	// balance accounts at year end), #RES (result accounts over the year).
+	if ib, err := s.TrialBalanceAsOf(ctx, companyID, yearStart.AddDate(0, 0, -1)); err == nil {
+		for _, r := range ib {
+			if r.Class.IsBalance() && r.Net != 0 {
+				exp.OpeningBalances = append(exp.OpeningBalances, sie.Balance{Account: r.Account, Amount: int64(r.Net)})
+			}
+		}
+	}
+	if ub, err := s.TrialBalanceAsOf(ctx, companyID, yearEnd); err == nil {
+		for _, r := range ub {
+			if r.Class.IsBalance() && r.Net != 0 {
+				exp.ClosingBalances = append(exp.ClosingBalances, sie.Balance{Account: r.Account, Amount: int64(r.Net)})
+			}
+		}
+	}
+	if res, err := s.TrialBalanceBetween(ctx, companyID, yearStart, yearEnd); err == nil {
+		for _, r := range res {
+			if r.Class.IsResult() && r.Net != 0 {
+				exp.Results = append(exp.Results, sie.Balance{Account: r.Account, Amount: int64(r.Net)})
+			}
+		}
 	}
 	return exp, nil
 }

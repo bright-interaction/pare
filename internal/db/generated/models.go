@@ -27,6 +27,8 @@ type AuditLog struct {
 	TargetID    string             `json:"target_id"`
 	Detail      string             `json:"detail"`
 	At          pgtype.Timestamptz `json:"at"`
+	PrevHash    string             `json:"prev_hash"`
+	EntryHash   string             `json:"entry_hash"`
 }
 
 type Company struct {
@@ -143,6 +145,7 @@ type User struct {
 	Email        string             `json:"email"`
 	PasswordHash string             `json:"password_hash"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Role         string             `json:"role"`
 }
 
 type Verification struct {

@@ -2,7 +2,7 @@
 SELECT COUNT(*) FROM users;
 
 -- name: InsertUser :one
-INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING *;
+INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING *;
 
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE email = $1;
@@ -11,7 +11,7 @@ SELECT * FROM users WHERE email = $1;
 INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3);
 
 -- name: GetSession :one
-SELECT s.user_id, s.expires_at, u.email
+SELECT s.user_id, s.expires_at, u.email, u.role
 FROM sessions s JOIN users u ON u.id = s.user_id
 WHERE s.token = $1;
 

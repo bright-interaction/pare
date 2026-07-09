@@ -74,6 +74,7 @@ func (s *Server) Routes() http.Handler {
 
 			r.Group(func(r chi.Router) {
 				r.Use(s.requireSession)
+				r.Use(s.blockViewerWrites)
 				r.Get("/dashboard", s.handleDashboard)
 				r.Get("/counterparties", s.handleCounterparties)
 				r.Post("/counterparties", s.handleAddCounterparty)
@@ -108,6 +109,7 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/unlock", s.handleUnlock)
 				r.Get("/settings", s.handleSettings)
 				r.Post("/settings", s.handleSettingsSave)
+				r.Post("/users", s.handleInviteUser)
 			})
 		})
 	}

@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 // Config holds all runtime settings.
@@ -19,6 +20,7 @@ type Config struct {
 	MasterKey    []byte // PARE_MASTER_KEY, 32 bytes, wraps per-company DEKs
 	ShieldKey    []byte // PARE_SHIELD_KEY, 32 bytes, optional (MCP boundary)
 	MCPKey       string // PARE_MCP_KEY, gates the MCP endpoint (optional)
+	MCPMaxOre    int64  // per-write ceiling for AI-posted amounts (öre; 0 = unlimited)
 	GotenbergURL string
 	LogLevel     string
 }
@@ -29,6 +31,7 @@ func Load() (*Config, error) {
 		Addr:         env("PARE_ADDR", ":8080"),
 		DatabaseURL:  os.Getenv("PARE_DATABASE_URL"),
 		MCPKey:       os.Getenv("PARE_MCP_KEY"),
+		MCPMaxOre:    envInt64("PARE_MCP_MAX_ORE", 50_000_000), // 500 000 SEK per AI write
 		GotenbergURL: env("PARE_GOTENBERG_URL", "http://gotenberg:3000"),
 		LogLevel:     env("PARE_LOG_LEVEL", "info"),
 	}
@@ -72,6 +75,15 @@ func key(name string, required bool) ([]byte, error) {
 func env(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
+	}
+	return def
+}
+
+func envInt64(k string, def int64) int64 {
+	if v := os.Getenv(k); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
 	}
 	return def
 }
