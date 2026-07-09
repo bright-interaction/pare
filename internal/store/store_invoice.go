@@ -253,7 +253,8 @@ func (s *Store) CreditInvoice(ctx context.Context, companyID, invoiceID uuid.UUI
 	if orig.CompanyID != companyID {
 		return uuid.Nil, "", ErrForeignCompany
 	}
-	if orig.Status != "finalized" {
+	// A finalized (unpaid) invoice or a paid one (a refund) can be credited.
+	if orig.Status != "finalized" && orig.Status != "paid" {
 		return uuid.Nil, "", ErrNotFinalized
 	}
 	origLines, err := s.q.ListInvoiceLines(ctx, invoiceID)
@@ -310,7 +311,7 @@ func (s *Store) CreditInvoice(ctx context.Context, companyID, invoiceID uuid.UUI
 		}); err != nil {
 			return err
 		}
-		if _, err := qtx.MarkInvoiceCancelled(ctx, gen.MarkInvoiceCancelledParams{ID: invoiceID, CompanyID: companyID}); err != nil {
+		if _, err := qtx.MarkInvoiceCredited(ctx, gen.MarkInvoiceCreditedParams{ID: invoiceID, CompanyID: companyID}); err != nil {
 			return err
 		}
 		return s.logAudit(ctx, qtx, companyID, "credit_invoice", "invoice", invoiceID.String(), "kreditfaktura "+number)
@@ -345,10 +346,14 @@ type InvoiceView struct {
 	Total            ledger.Amount
 	Currency         string
 	TotalSEK         ledger.Amount // gross booked to Kundfordringar in SEK
+	AmountPaid       ledger.Amount // SEK settled so far (partial payments)
 	OCR              string
 	IsCredit         bool   // this invoice is a kreditfaktura
 	CreditsNumber    string // the original invoice number it credits
 }
+
+// Outstanding returns the SEK still owed on the invoice.
+func (v InvoiceView) Outstanding() ledger.Amount { return v.TotalSEK - v.AmountPaid }
 
 // VATSummaryRow is one row of the per-rate VAT breakout required on a faktura.
 type VATSummaryRow struct {
@@ -443,6 +448,7 @@ func (s *Store) InvoiceForRender(ctx context.Context, companyID, invoiceID uuid.
 	}
 	view.Total = view.Net + view.VAT
 	view.TotalSEK = inv.GrossSEK()
+	view.AmountPaid = ledger.Amount(dbInv.AmountPaidOre)
 	if dbInv.CreditsInvoiceID.Valid {
 		view.IsCredit = true
 		if orig, err := s.q.GetInvoice(ctx, uuidFromPg(dbInv.CreditsInvoiceID)); err == nil {

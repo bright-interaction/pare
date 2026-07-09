@@ -11,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteAllShieldTokens = `-- name: DeleteAllShieldTokens :execrows
+DELETE FROM shield_tokens
+`
+
+// Purge the whole token vault (single-tenant: no company_id on shield_tokens).
+// Called on GDPR erasure so no pre-erasure identity stays resolvable in any
+// session; active sessions simply re-tokenize (getting the tombstone) on next read.
+func (q *Queries) DeleteAllShieldTokens(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAllShieldTokens)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteOldShieldTokens = `-- name: DeleteOldShieldTokens :execrows
 DELETE FROM shield_tokens WHERE created_at < $1
 `

@@ -57,9 +57,9 @@ func TestRecordPaymentSEK(t *testing.T) {
 	}
 }
 
-// A SEK invoice settled with an amount that is not the invoice total is rejected
-// (it must not be silently booked as a currency difference).
-func TestRecordPaymentSEKMismatchRejected(t *testing.T) {
+// A SEK invoice can be paid in instalments; a final payment within an öre
+// tolerance settles it via 3740; overpaying beyond the tolerance is rejected.
+func TestRecordPaymentPartialAndRounding(t *testing.T) {
 	s, pool := testStore(t)
 	defer pool.Close()
 	ctx := context.Background()
@@ -72,19 +72,58 @@ func TestRecordPaymentSEKMismatchRejected(t *testing.T) {
 	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
-	view, _ := s.InvoiceForRender(ctx, co, invID)
+	gross := ledger.SEK(12500, 0) // 10000 + 25%
 
-	if _, err := s.RecordPayment(ctx, co, invID, day("2026-03-01"), "1930", view.TotalSEK-ledger.SEK(100, 0)); err != ErrPaymentMismatch {
-		t.Fatalf("want ErrPaymentMismatch, got %v", err)
+	// Partial payment of 5000: invoice stays finalized, receivable partly open.
+	if _, err := s.RecordPayment(ctx, co, invID, day("2026-03-01"), "1930", ledger.SEK(5000, 0)); err != nil {
+		t.Fatalf("partial: %v", err)
 	}
-	// The invoice must stay finalized (unpaid) after a rejected payment.
-	after, _ := s.InvoiceForRender(ctx, co, invID)
-	if after.Status != "finalized" {
-		t.Fatalf("status changed after rejected payment: %s", after.Status)
+	v, _ := s.InvoiceForRender(ctx, co, invID)
+	if v.Status != "finalized" || v.Outstanding() != gross-ledger.SEK(5000, 0) {
+		t.Fatalf("after partial: status=%s outstanding=%s", v.Status, v.Outstanding())
 	}
 	bal, _ := s.BalancesMap(ctx, co)
+	if bal["1510"] != gross-ledger.SEK(5000, 0) {
+		t.Fatalf("receivable after partial = %s", bal["1510"])
+	}
+
+	// Final payment 50 öre short of the balance: settles via 3740 öresavrundning.
+	rest := v.Outstanding() - ledger.Amount(50)
+	if _, err := s.RecordPayment(ctx, co, invID, day("2026-03-10"), "1930", rest); err != nil {
+		t.Fatalf("final: %v", err)
+	}
+	paid, _ := s.InvoiceForRender(ctx, co, invID)
+	if paid.Status != "paid" {
+		t.Fatalf("not settled: %s", paid.Status)
+	}
+	bal, _ = s.BalancesMap(ctx, co)
+	if bal["1510"] != 0 {
+		t.Fatalf("receivable not cleared: 1510=%s", bal["1510"])
+	}
+	if bal["3740"] != ledger.Amount(50) { // 50 öre written off (debit)
+		t.Fatalf("öresavrundning not booked to 3740: %s", bal["3740"])
+	}
 	if bal["3960"] != 0 || bal["7960"] != 0 {
-		t.Fatalf("FX accounts touched on a SEK mismatch: 3960=%s 7960=%s", bal["3960"], bal["7960"])
+		t.Fatalf("FX accounts touched on a SEK invoice: 3960=%s 7960=%s", bal["3960"], bal["7960"])
+	}
+	assertTrialZero(t, s, co)
+}
+
+// Overpaying a SEK invoice beyond the öre tolerance is a refund, not a payment.
+func TestRecordPaymentOverpayRejected(t *testing.T) {
+	s, pool := testStore(t)
+	defer pool.Close()
+	ctx := context.Background()
+	co, _ := s.BootstrapCompany(ctx, "BI AB", "556000-0000")
+	cust, _ := s.CreateCounterparty(ctx, co, Counterparty{Kind: "customer", Name: "Kund AB", OrgNr: "556100-2222"})
+	invID, _ := s.CreateInvoice(ctx, co, cust, invoice.Invoice{Lines: []invoice.Line{
+		{Description: "Tjänst", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(10000, 0), VATCode: moms.SE25},
+	}})
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+	if _, err := s.RecordPayment(ctx, co, invID, day("2026-03-01"), "1930", ledger.SEK(13000, 0)); err != ErrPaymentMismatch {
+		t.Fatalf("want ErrPaymentMismatch on overpay, got %v", err)
 	}
 }
 

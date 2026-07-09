@@ -108,5 +108,11 @@ func (s *Store) EraseCounterparty(ctx context.Context, companyID, id uuid.UUID) 
 	}); err != nil {
 		return err
 	}
+	// Purge the shield token vault so no pre-erasure identity remains resolvable
+	// in any MCP session (tokens are per-session HMACs that cannot be targeted
+	// individually). Active sessions re-tokenize to the tombstone on next read.
+	if _, err := s.q.DeleteAllShieldTokens(ctx); err != nil {
+		return err
+	}
 	return s.logAudit(ctx, s.q, companyID, "erase_counterparty", "counterparty", id.String(), cp.Kind)
 }

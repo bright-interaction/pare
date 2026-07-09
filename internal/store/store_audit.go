@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -48,7 +49,7 @@ func (s *Store) logAudit(ctx context.Context, q *gen.Queries, companyID uuid.UUI
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	entry := auditHash(prev, a.Kind, a.Detail, action, targetType, targetID, detail)
+	entry := s.auditHash(prev, a.Kind, a.Detail, action, targetType, targetID, detail)
 	return q.InsertAuditLog(ctx, gen.InsertAuditLogParams{
 		CompanyID:   companyID,
 		Actor:       a.Kind,
@@ -62,10 +63,14 @@ func (s *Store) logAudit(ctx context.Context, q *gen.Queries, companyID uuid.UUI
 	})
 }
 
-// auditHash chains an audit entry to the previous one: h = SHA256(prev || fields).
-// Tampering with any content field or reordering breaks every following hash.
-func auditHash(prev string, fields ...string) string {
-	h := sha256.New()
+// auditHash chains an audit entry to the previous one:
+// h = HMAC-SHA256(auditKey, prev || fields). The key is derived from
+// PARE_MASTER_KEY and never stored, so an attacker with DB write access still
+// cannot forge a valid hash (a plain SHA-256 chain they could recompute). The
+// DB unique index on (company_id, prev_hash) additionally makes forking a second
+// branch off any entry impossible, not just detectable.
+func (s *Store) auditHash(prev string, fields ...string) string {
+	h := hmac.New(sha256.New, s.auditKey)
 	h.Write([]byte(prev))
 	for _, f := range fields {
 		h.Write([]byte{0})
@@ -83,7 +88,7 @@ func (s *Store) VerifyAuditChain(ctx context.Context, companyID uuid.UUID) (ok b
 	}
 	prev := ""
 	for _, r := range rows {
-		want := auditHash(prev, r.Actor, r.ActorDetail, r.Action, r.TargetType, r.TargetID, r.Detail)
+		want := s.auditHash(prev, r.Actor, r.ActorDetail, r.Action, r.TargetType, r.TargetID, r.Detail)
 		if r.PrevHash != prev || r.EntryHash != want {
 			return false, r.ID, nil
 		}

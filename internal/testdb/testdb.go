@@ -61,7 +61,10 @@ func New(t *testing.T, suffix string) string {
 // Reset truncates all business tables so each test starts clean.
 func Reset(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), "TRUNCATE companies, shield_tokens CASCADE"); err != nil {
+	// companies CASCADE clears accounts/verifications/counterparties/invoices/
+	// supplier_invoices/audit_log/fiscal_years; users CASCADE clears sessions;
+	// shield_tokens stands alone. Truncate all so every test starts fully isolated.
+	if _, err := pool.Exec(context.Background(), "TRUNCATE companies, users, shield_tokens CASCADE"); err != nil {
 		t.Fatalf("testdb: reset: %v", err)
 	}
 }

@@ -6,6 +6,12 @@ ON CONFLICT (session_id, token) DO NOTHING;
 -- name: GetShieldToken :one
 SELECT ciphertext FROM shield_tokens WHERE session_id = $1 AND token = $2;
 
+-- name: DeleteAllShieldTokens :execrows
+-- Purge the whole token vault (single-tenant: no company_id on shield_tokens).
+-- Called on GDPR erasure so no pre-erasure identity stays resolvable in any
+-- session; active sessions simply re-tokenize (getting the tombstone) on next read.
+DELETE FROM shield_tokens;
+
 -- name: DeleteOldShieldTokens :execrows
 -- TTL sweep: bounds how long any tokenized value (including a GDPR-erased
 -- counterparty's identity captured in a prior MCP session) remains resolvable.
