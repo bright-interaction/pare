@@ -8,6 +8,17 @@
     <label>Lösenord</label><input type="password" name="password" required minlength="8">
     <label>Företagsnamn</label><input name="company" required>
     <label>Organisationsnummer</label><input name="orgnr" placeholder="556000-0000" required>
+    <label>Momsregistreringsnummer</label><input name="momsregnr" placeholder="lämna tomt för att härleda SE...01">
+    <label>Adress</label><input name="address" placeholder="Gatan 1">
+    <div class="row">
+      <div style="flex:0 0 130px"><label>Postnummer</label><input name="postal_code" placeholder="111 22"></div>
+      <div><label>Ort</label><input name="city" placeholder="Stockholm"></div>
+    </div>
+    <div class="row">
+      <div><label>Bankgiro</label><input name="bankgiro" placeholder="123-4567"></div>
+      <div><label>IBAN</label><input name="iban" placeholder="SE.."></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:12px"><input type="checkbox" name="fskatt" value="1" style="width:auto" checked> Godkänd för F-skatt</label>
     <div style="margin-top:18px"><button class="btn" type="submit">Skapa konto</button></div>
   </form>
 </div>

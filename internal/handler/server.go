@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/httprate"
 
 	"github.com/brightinteraction/pare/internal/auth"
+	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/mcp"
 	renderpkg "github.com/brightinteraction/pare/internal/render"
 	"github.com/brightinteraction/pare/internal/store"
@@ -36,6 +37,7 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(flarereport.FlareRecoverer)
 	r.Use(maxBody)
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(securityHeaders)
@@ -85,15 +87,25 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/invoices/{id}/pay", s.handlePayForm)
 				r.Post("/invoices/{id}/pay", s.handlePay)
 				r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
+				r.Get("/supplier-invoices", s.handleSupplierInvoices)
+				r.Get("/supplier-invoices/new", s.handleSupplierInvoiceNew)
+				r.Post("/supplier-invoices", s.handleSupplierInvoiceCreate)
+				r.Post("/supplier-invoices/{id}/finalize", s.handleSupplierInvoiceFinalize)
+				r.Get("/supplier-invoices/{id}/pay", s.handleSupplierPayForm)
+				r.Post("/supplier-invoices/{id}/pay", s.handleSupplierPay)
 				r.Get("/verifications", s.handleVerifications)
 				r.Post("/verifications", s.handlePostVerification)
 				r.Post("/verifications/{id}/undo", s.handleUndo)
 				r.Get("/reports", s.handleReports)
 				r.Get("/sie", s.handleSIE)
+				r.Get("/sie/import", s.handleSIEImportForm)
+				r.Post("/sie/import", s.handleSIEImport)
 				r.Get("/export.csv", s.handleCSV)
 				r.Get("/logg", s.handleLogg)
 				r.Post("/lock", s.handleLock)
 				r.Post("/unlock", s.handleUnlock)
+				r.Get("/settings", s.handleSettings)
+				r.Post("/settings", s.handleSettingsSave)
 			})
 		})
 	}
@@ -120,7 +132,11 @@ func securityHeaders(next http.Handler) http.Handler {
 // be used to exhaust memory (the /mcp handler additionally caps its own body).
 func maxBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		limit := int64(1 << 20)
+		if r.URL.Path == "/sie/import" {
+			limit = 16 << 20 // a full year's SIE file upload
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)
 	})
 }

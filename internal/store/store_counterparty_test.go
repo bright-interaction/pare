@@ -97,7 +97,7 @@ func TestEraseCounterpartyBlockedByRetention(t *testing.T) {
 	invID, _ := s.CreateInvoice(ctx, co, cust, invoice.Invoice{Lines: []invoice.Line{
 		{Description: "Tjänst", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(1000, 0), VATCode: moms.SE25},
 	}})
-	if _, err := s.FinalizeInvoice(ctx, co, invID, "2026-0001", day("2026-02-01"), day("2026-03-03")); err != nil {
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 

@@ -19,9 +19,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/brightinteraction/pare/internal/auth"
+	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/invoice"
 	"github.com/brightinteraction/pare/internal/ledger"
 	"github.com/brightinteraction/pare/internal/moms"
+	"github.com/brightinteraction/pare/internal/sie"
 	"github.com/brightinteraction/pare/internal/store"
 )
 
@@ -76,6 +78,7 @@ func companyID(r *http.Request) uuid.UUID {
 
 func (s *Server) fail(w http.ResponseWriter, err error) {
 	slog.Error("web handler", "err", err)
+	flarereport.CaptureErr(err)
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }
 
@@ -120,10 +123,13 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	// Company first: a DB singleton (migration 00008) makes a concurrent second
 	// BootstrapCompany fail here, before any user is created, closing the
 	// first-user-wins race without an orphan user.
-	if _, err := s.Store.BootstrapCompany(r.Context(), company, orgnr); err != nil {
+	coID, err := s.Store.BootstrapCompany(r.Context(), company, orgnr)
+	if err != nil {
 		render(w, "setup", pageData{Title: "Kom igång", CSRF: csrfToken(r), Error: "Kunde inte skapa företaget (det kan redan finnas ett)."}, http.StatusBadRequest)
 		return
 	}
+	// Seller profile for valid invoices (best-effort; editable later under Företag).
+	_ = s.Store.UpdateCompanyProfile(r.Context(), companyProfileFromForm(r, coID, company, orgnr))
 	if err := s.Auth.CreateUser(r.Context(), email, pw); err != nil {
 		render(w, "setup", pageData{Title: "Kom igång", CSRF: csrfToken(r), Error: "Kunde inte skapa konto."}, http.StatusBadRequest)
 		return
@@ -199,6 +205,69 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		Moms:          d,
 	}
 	render(w, "dashboard", pd, http.StatusOK)
+}
+
+// companyProfileFromForm builds a CompanyInfo from the setup/settings form,
+// deriving the momsregnr from the org number when the field is left blank.
+func companyProfileFromForm(r *http.Request, id uuid.UUID, name, orgnr string) store.CompanyInfo {
+	momsregnr := strings.TrimSpace(r.PostFormValue("momsregnr"))
+	if momsregnr == "" {
+		momsregnr = deriveMomsRegNr(orgnr)
+	}
+	return store.CompanyInfo{
+		ID: id, Name: name, OrgNr: orgnr, MomsRegNr: momsregnr,
+		Address:    strings.TrimSpace(r.PostFormValue("address")),
+		PostalCode: strings.TrimSpace(r.PostFormValue("postal_code")),
+		City:       strings.TrimSpace(r.PostFormValue("city")),
+		Bankgiro:   strings.TrimSpace(r.PostFormValue("bankgiro")),
+		IBAN:       strings.TrimSpace(r.PostFormValue("iban")),
+		FSkatt:     r.PostFormValue("fskatt") == "1",
+	}
+}
+
+// deriveMomsRegNr builds the Swedish VAT number SE<10 digits>01 from an org
+// number (returns "" if the org number is not 10 digits).
+func deriveMomsRegNr(orgnr string) string {
+	digits := make([]rune, 0, 10)
+	for _, c := range orgnr {
+		if c >= '0' && c <= '9' {
+			digits = append(digits, c)
+		}
+	}
+	if len(digits) != 10 {
+		return ""
+	}
+	return "SE" + string(digits) + "01"
+}
+
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	ci, err := s.Store.Company(r.Context(), companyID(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	pd := s.base(r, "Företag")
+	if r.URL.Query().Get("msg") == "saved" {
+		pd.Flash = "Företagsuppgifterna sparades."
+	}
+	pd.Data = ci
+	render(w, "settings", pd, http.StatusOK)
+}
+
+func (s *Server) handleSettingsSave(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	co := companyID(r)
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	orgnr := strings.TrimSpace(r.PostFormValue("orgnr"))
+	if name == "" {
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		return
+	}
+	if err := s.Store.UpdateCompanyProfile(r.Context(), companyProfileFromForm(r, co, name, orgnr)); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/settings?msg=saved", http.StatusSeeOther)
 }
 
 func (s *Server) handleCounterparties(w http.ResponseWriter, r *http.Request) {
@@ -374,8 +443,7 @@ func (s *Server) handleInvoiceFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	co := companyID(r)
-	number := s.nextInvoiceNumber(r.Context(), co)
-	if _, err := s.Store.FinalizeInvoice(r.Context(), co, id, number, time.Now(), time.Now().AddDate(0, 0, 30)); err != nil {
+	if _, _, err := s.Store.FinalizeInvoice(r.Context(), co, id, time.Now(), time.Now().AddDate(0, 0, 30)); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -477,6 +545,146 @@ func (s *Server) handlePay(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- supplier invoices (accounts payable) ---
+
+func (s *Server) handleSupplierInvoices(w http.ResponseWriter, r *http.Request) {
+	list, err := s.Store.ListSupplierInvoiceViews(r.Context(), companyID(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	pd := s.base(r, "Kostnader")
+	pd.Data = list
+	render(w, "supplier_invoices", pd, http.StatusOK)
+}
+
+type supplierNewData struct {
+	Suppliers    []store.Counterparty
+	CostAccounts []ledger.Account
+}
+
+func (s *Server) handleSupplierInvoiceNew(w http.ResponseWriter, r *http.Request) {
+	co, ctx := companyID(r), r.Context()
+	cps, _ := s.Store.ListCounterparties(ctx, co)
+	accts, _ := s.Store.ChartAccounts(ctx, co)
+	var costs []ledger.Account
+	for _, a := range accts {
+		if a.Number != "" && a.Number[0] >= '4' && a.Number[0] <= '7' {
+			costs = append(costs, a)
+		}
+	}
+	var sups []store.Counterparty
+	for _, c := range cps {
+		if !c.Erased {
+			sups = append(sups, c)
+		}
+	}
+	pd := s.base(r, "Ny leverantörsfaktura")
+	pd.Data = supplierNewData{Suppliers: sups, CostAccounts: costs}
+	render(w, "supplier_invoice_new", pd, http.StatusOK)
+}
+
+func (s *Server) handleSupplierInvoiceCreate(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	cpID, err := uuid.Parse(r.PostFormValue("counterparty"))
+	if err != nil {
+		http.Redirect(w, r, "/supplier-invoices/new", http.StatusSeeOther)
+		return
+	}
+	date := formDateOr(r.PostFormValue("date"), time.Now())
+	due := formDateOr(r.PostFormValue("due"), date.AddDate(0, 0, 30))
+	code := moms.PurchaseCode(r.PostFormValue("vat"))
+	net := parseKrOre(r.PostFormValue("net"))
+	if _, err := s.Store.CreateSupplierInvoice(r.Context(), companyID(r), cpID,
+		strings.TrimSpace(r.PostFormValue("supplier_number")), date, due,
+		strings.TrimSpace(r.PostFormValue("account")), net, code,
+		strings.TrimSpace(r.PostFormValue("description"))); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/supplier-invoices", http.StatusSeeOther)
+}
+
+func (s *Server) handleSupplierInvoiceFinalize(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := s.Store.FinalizeSupplierInvoice(r.Context(), companyID(r), id); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/supplier-invoices", http.StatusSeeOther)
+}
+
+func (s *Server) handleSupplierPayForm(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	co, ctx := companyID(r), r.Context()
+	v, err := s.Store.SupplierInvoiceForView(ctx, co, id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if v.Status != "finalized" {
+		http.Redirect(w, r, "/supplier-invoices", http.StatusSeeOther)
+		return
+	}
+	accts, _ := s.Store.ChartAccounts(ctx, co)
+	var banks []ledger.Account
+	for _, a := range accts {
+		if strings.HasPrefix(a.Number, "19") {
+			banks = append(banks, a)
+		}
+	}
+	pd := s.base(r, "Betala leverantörsfaktura")
+	pd.Data = payData{
+		ID: id.String(), Number: v.SupplierNumber, CustomerName: v.SupplierName,
+		Total: v.Payable, Currency: "SEK", TotalSEK: v.Payable,
+		TotalSEKInput: oreDot(v.Payable), BankAccounts: banks,
+	}
+	render(w, "supplier_pay", pd, http.StatusOK)
+}
+
+func (s *Server) handleSupplierPay(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = r.ParseForm()
+	date, err := time.Parse("2006-01-02", r.PostFormValue("date"))
+	if err != nil {
+		http.Redirect(w, r, "/supplier-invoices/"+id.String()+"/pay", http.StatusSeeOther)
+		return
+	}
+	account := strings.TrimSpace(r.PostFormValue("account"))
+	if account == "" {
+		account = "1930"
+	}
+	_, err = s.Store.RecordSupplierPayment(r.Context(), companyID(r), id, date, account, parseKrOre(r.PostFormValue("amount")))
+	switch {
+	case err == nil:
+		http.Redirect(w, r, "/supplier-invoices", http.StatusSeeOther)
+	case errors.Is(err, store.ErrPaymentMismatch), errors.Is(err, store.ErrNotFinalized):
+		http.Redirect(w, r, "/supplier-invoices/"+id.String()+"/pay", http.StatusSeeOther)
+	default:
+		s.fail(w, err)
+	}
+}
+
+// formDateOr parses a YYYY-MM-DD form value, falling back to def.
+func formDateOr(v string, def time.Time) time.Time {
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		return t
+	}
+	return def
+}
+
 type reportsData struct {
 	Statements ledger.Statements
 	Moms       moms.Declaration
@@ -520,6 +728,47 @@ func (s *Server) handleSIE(w http.ResponseWriter, r *http.Request) {
 	if err := exp.Write(w); err != nil {
 		slog.Error("sie write", "err", err)
 	}
+}
+
+func (s *Server) handleSIEImportForm(w http.ResponseWriter, r *http.Request) {
+	pd := s.base(r, "Importera SIE")
+	render(w, "sie_import", pd, http.StatusOK)
+}
+
+func (s *Server) handleSIEImport(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		pd := s.base(r, "Importera SIE")
+		pd.Error = "Kunde inte läsa filen (för stor eller ogiltig)."
+		render(w, "sie_import", pd, http.StatusBadRequest)
+		return
+	}
+	f, _, err := r.FormFile("file")
+	if err != nil {
+		pd := s.base(r, "Importera SIE")
+		pd.Error = "Välj en SIE-fil att importera."
+		render(w, "sie_import", pd, http.StatusBadRequest)
+		return
+	}
+	defer f.Close()
+
+	exp, err := sie.Parse(f)
+	if err != nil {
+		pd := s.base(r, "Importera SIE")
+		pd.Error = "Filen kunde inte tolkas som SIE 4."
+		render(w, "sie_import", pd, http.StatusBadRequest)
+		return
+	}
+	res, err := s.Store.ImportSIE(r.Context(), companyID(r), exp)
+	if err != nil {
+		slog.Error("sie import", "err", err)
+		pd := s.base(r, "Importera SIE")
+		pd.Error = "Importen avbröts: en verifikation balanserar inte eller ett konto saknas. Inget bokfördes."
+		render(w, "sie_import", pd, http.StatusBadRequest)
+		return
+	}
+	pd := s.base(r, "Importera SIE")
+	pd.Flash = fmt.Sprintf("Importerade %d verifikat och %d konton.", res.Vouchers, res.AccountsSeeded)
+	render(w, "sie_import", pd, http.StatusOK)
 }
 
 // handleCSV exports the ledger transactions as CSV (no lock-in, universal).
@@ -713,17 +962,6 @@ func verErrMsg(err error) string {
 }
 
 // --- helpers ---
-
-func (s *Server) nextInvoiceNumber(ctx context.Context, co uuid.UUID) string {
-	inv, _ := s.Store.ListInvoiceSummaries(ctx, co)
-	seq := 1
-	for _, i := range inv {
-		if i.Number != "" {
-			seq++
-		}
-	}
-	return fmt.Sprintf("%d-%04d", time.Now().Year(), seq)
-}
 
 func get(s []string, i int) string {
 	if i < len(s) {

@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const allocInvoiceNumber = `-- name: AllocInvoiceNumber :one
+INSERT INTO invoice_number_seq (company_id, year, next_no)
+VALUES ($1, $2, 1)
+ON CONFLICT (company_id, year)
+DO UPDATE SET next_no = invoice_number_seq.next_no + 1
+RETURNING next_no
+`
+
+type AllocInvoiceNumberParams struct {
+	CompanyID uuid.UUID `json:"company_id"`
+	Year      int32     `json:"year"`
+}
+
+// Atomically allocate the next gap-free number for a company + year. First call
+// of a year returns 1; the row lock serializes concurrent finalizes.
+func (q *Queries) AllocInvoiceNumber(ctx context.Context, arg AllocInvoiceNumberParams) (int64, error) {
+	row := q.db.QueryRow(ctx, allocInvoiceNumber, arg.CompanyID, arg.Year)
+	var next_no int64
+	err := row.Scan(&next_no)
+	return next_no, err
+}
+
 const finalizeInvoice = `-- name: FinalizeInvoice :exec
 UPDATE invoices
 SET status = 'finalized', number = $2, invoice_date = $3, due_date = $4,

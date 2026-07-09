@@ -1,0 +1,36 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Ny leverantörsfaktura</h1>
+{{if $d.Suppliers}}
+<form method="post" action="/supplier-invoices">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="row">
+    <div><label>Leverantör</label><select name="counterparty" required>{{range $d.Suppliers}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
+    <div><label>Fakturanummer (leverantörens)</label><input name="supplier_number" placeholder="INV-42"></div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <div><label>Fakturadatum</label><input name="date" type="date" required></div>
+    <div><label>Förfallodatum</label><input name="due" type="date"></div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <div><label>Momsbehandling</label>
+      <select name="vat">
+        <option value="PD25">Svensk moms 25 %</option>
+        <option value="PD12">Svensk moms 12 %</option>
+        <option value="PD06">Svensk moms 6 %</option>
+        <option value="PEU">EU-tjänst (omvänd moms)</option>
+        <option value="PIMP">Tjänst utanför EU (omvänd moms)</option>
+        <option value="PNONE">Ingen avdragsgill moms</option>
+      </select>
+    </div>
+    <div><label>Nettobelopp (kr, exkl. moms)</label><input name="net" type="number" step="0.01" required></div>
+  </div>
+  <label>Kostnadskonto <span class="muted">(används ej vid omvänd moms, då bokförs på 4531/4535)</span></label>
+  <select name="account">{{range $d.CostAccounts}}<option value="{{.Number}}">{{.Number}} {{.Name}}</option>{{end}}</select>
+  <label>Beskrivning</label><input name="description" placeholder="t.ex. API mars">
+  <div style="margin-top:16px"><button class="btn" type="submit">Skapa utkast</button> <a class="btn secondary" href="/supplier-invoices">Avbryt</a></div>
+</form>
+{{else}}
+<div class="empty">Lägg till en <a href="/counterparties">leverantör</a> först (välj typ Leverantör under Redigera).</div>
+{{end}}
+{{end}}

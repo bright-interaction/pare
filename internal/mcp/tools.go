@@ -149,8 +149,10 @@ type momsResult struct {
 	Box10Kr string `json:"box_10_output_25_kr"`
 	Box11Kr string `json:"box_11_output_12_kr"`
 	Box12Kr string `json:"box_12_output_6_kr"`
+	Box21Kr string `json:"box_21_eu_services_bought_kr"`
+	Box22Kr string `json:"box_22_non_eu_services_bought_kr"`
 	Box30Kr string `json:"box_30_reverse_charge_output_kr"`
-	Box39Kr string `json:"box_39_eu_services_kr"`
+	Box39Kr string `json:"box_39_eu_services_sold_kr"`
 	Box48Kr string `json:"box_48_input_kr"`
 	Box49Kr string `json:"box_49_to_pay_kr"`
 }
@@ -263,7 +265,8 @@ func runMoms(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) {
 	d := moms.Report(bal)
 	return &momsResult{
 		Box05Kr: d.Box05.String(), Box10Kr: d.Box10.String(), Box11Kr: d.Box11.String(),
-		Box12Kr: d.Box12.String(), Box30Kr: d.Box30.String(), Box39Kr: d.Box39.String(),
+		Box12Kr: d.Box12.String(), Box21Kr: d.Box21.String(), Box22Kr: d.Box22.String(),
+		Box30Kr: d.Box30.String(), Box39Kr: d.Box39.String(),
 		Box48Kr: d.Box48.String(), Box49Kr: d.Box49.String(),
 	}, nil
 }

@@ -10,6 +10,15 @@ VALUES ($1, $2, $3, $4, $5, $6);
 -- name: GetInvoice :one
 SELECT * FROM invoices WHERE id = $1;
 
+-- name: AllocInvoiceNumber :one
+-- Atomically allocate the next gap-free number for a company + year. First call
+-- of a year returns 1; the row lock serializes concurrent finalizes.
+INSERT INTO invoice_number_seq (company_id, year, next_no)
+VALUES ($1, $2, 1)
+ON CONFLICT (company_id, year)
+DO UPDATE SET next_no = invoice_number_seq.next_no + 1
+RETURNING next_no;
+
 -- name: GetInvoiceByNumber :one
 SELECT * FROM invoices WHERE company_id = $1 AND number = $2;
 

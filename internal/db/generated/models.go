@@ -36,6 +36,15 @@ type Company struct {
 	DekWrapped    string             `json:"dek_wrapped"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	LockedThrough pgtype.Date        `json:"locked_through"`
+	Momsregnr     string             `json:"momsregnr"`
+	Address       string             `json:"address"`
+	PostalCode    string             `json:"postal_code"`
+	City          string             `json:"city"`
+	Bankgiro      string             `json:"bankgiro"`
+	Iban          string             `json:"iban"`
+	Fskatt        bool               `json:"fskatt"`
+	KeyID         string             `json:"key_id"`
+	KeyVersion    int32              `json:"key_version"`
 }
 
 type Counterparty struct {
@@ -88,6 +97,12 @@ type InvoiceLine struct {
 	VatCode       string    `json:"vat_code"`
 }
 
+type InvoiceNumberSeq struct {
+	CompanyID uuid.UUID `json:"company_id"`
+	Year      int32     `json:"year"`
+	NextNo    int64     `json:"next_no"`
+}
+
 type Session struct {
 	Token     string             `json:"token"`
 	UserID    uuid.UUID          `json:"user_id"`
@@ -101,6 +116,25 @@ type ShieldToken struct {
 	Kind       string             `json:"kind"`
 	Ciphertext string             `json:"ciphertext"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type SupplierInvoice struct {
+	ID                    uuid.UUID          `json:"id"`
+	CompanyID             uuid.UUID          `json:"company_id"`
+	CounterpartyID        uuid.UUID          `json:"counterparty_id"`
+	SupplierNumber        string             `json:"supplier_number"`
+	InvoiceDate           pgtype.Date        `json:"invoice_date"`
+	DueDate               pgtype.Date        `json:"due_date"`
+	CostAccount           string             `json:"cost_account"`
+	NetOre                int64              `json:"net_ore"`
+	VatCode               string             `json:"vat_code"`
+	Description           string             `json:"description"`
+	Status                string             `json:"status"`
+	VerificationID        pgtype.UUID        `json:"verification_id"`
+	PaymentVerificationID pgtype.UUID        `json:"payment_verification_id"`
+	PaidAt                pgtype.Date        `json:"paid_at"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	FinalizedAt           pgtype.Timestamptz `json:"finalized_at"`
 }
 
 type User struct {

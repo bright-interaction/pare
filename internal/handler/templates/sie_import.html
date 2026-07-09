@@ -1,0 +1,11 @@
+{{define "content"}}
+<h1>Importera SIE</h1>
+<p class="muted" style="max-width:600px">Ladda upp en SIE 4-fil (.se) från Fortnox, Visma eller din revisor. Ingående balanser (#IB) bokförs som en verifikation och alla verifikat spelas in i tur och ordning. Hela importen är en transaktion: balanserar något inte avbryts allt.</p>
+<div class="alert error" style="max-width:600px">Importera bara till tomma böcker. Kör du importen två gånger dubbleras bokföringen.</div>
+<form method="post" action="/sie/import" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label>SIE-fil</label>
+  <input type="file" name="file" accept=".se,.si,.sie,text/plain" required>
+  <div style="margin-top:16px"><button class="btn" type="submit">Importera</button> <a class="btn secondary" href="/reports">Tillbaka</a></div>
+</form>
+{{end}}

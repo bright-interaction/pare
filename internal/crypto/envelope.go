@@ -11,8 +11,11 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +40,16 @@ func NewKEK(master []byte) (*KEK, error) {
 		return nil, ErrKeySize
 	}
 	return &KEK{key: clone(master)}, nil
+}
+
+// Fingerprint returns a short, non-secret identifier for this KEK, derived so it
+// never reveals the key. Stored on each company row (key_id) to attribute which
+// master key wrapped its DEK, which is the seam that makes future key rotation
+// possible (rotate = re-wrap DEKs whose key_id is the old fingerprint).
+func (k *KEK) Fingerprint() string {
+	mac := hmac.New(sha256.New, k.key)
+	mac.Write([]byte("pare/kek/fingerprint/v1"))
+	return hex.EncodeToString(mac.Sum(nil))[:16]
 }
 
 // NewDEK returns a fresh random 32-byte data-encryption key.

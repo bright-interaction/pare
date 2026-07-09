@@ -84,21 +84,40 @@ func (s *Store) CreateInvoice(ctx context.Context, companyID, counterpartyID uui
 // FinalizeInvoice assigns a number, auto-posts the balanced verifikat (series F)
 // and marks the invoice finalized, all in one transaction. Returns the posted
 // verification id.
-func (s *Store) FinalizeInvoice(ctx context.Context, companyID, invoiceID uuid.UUID, number string, date, due time.Time) (uuid.UUID, error) {
+// FinalizeInvoice numbers a draft invoice (allocating a gap-free per-year
+// number inside the transaction), auto-posts its balanced verifikat, and marks
+// it finalized. It returns the verifikat id and the allocated invoice number.
+func (s *Store) FinalizeInvoice(ctx context.Context, companyID, invoiceID uuid.UUID, date, due time.Time) (uuid.UUID, string, error) {
 	dbInv, err := s.q.GetInvoice(ctx, invoiceID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, "", err
 	}
 	if dbInv.CompanyID != companyID {
-		return uuid.Nil, ErrForeignCompany
+		return uuid.Nil, "", ErrForeignCompany
 	}
 	if dbInv.Status != "draft" {
-		return uuid.Nil, ErrNotDraft
+		return uuid.Nil, "", ErrNotDraft
 	}
 	lineRows, err := s.q.ListInvoiceLines(ctx, invoiceID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, "", err
 	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	defer tx.Rollback(ctx)
+	qtx := s.q.WithTx(tx)
+
+	// Allocate the number inside the tx so it is gap-free, per-year, and race-safe
+	// (a rollback below returns the number to the pool).
+	seq, err := qtx.AllocInvoiceNumber(ctx, gen.AllocInvoiceNumberParams{CompanyID: companyID, Year: int32(date.Year())})
+	if err != nil {
+		return uuid.Nil, "", fmt.Errorf("store: allocate invoice number: %w", err)
+	}
+	number := fmt.Sprintf("%d-%04d", date.Year(), seq)
+
 	inv := invoice.Invoice{Number: number, Date: date, DueDate: due, Currency: dbInv.Currency, RatePPM: dbInv.RatePpm}
 	for _, r := range lineRows {
 		inv.Lines = append(inv.Lines, invoice.Line{
@@ -109,16 +128,9 @@ func (s *Store) FinalizeInvoice(ctx context.Context, companyID, invoiceID uuid.U
 		})
 	}
 
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	defer tx.Rollback(ctx)
-	qtx := s.q.WithTx(tx)
-
 	verID, err := s.postVerification(ctx, qtx, companyID, "F", date, "Faktura "+number, inv.VerificationLines(), uuid.Nil)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, "", err
 	}
 	if err := qtx.FinalizeInvoice(ctx, gen.FinalizeInvoiceParams{
 		ID:             invoiceID,
@@ -128,15 +140,15 @@ func (s *Store) FinalizeInvoice(ctx context.Context, companyID, invoiceID uuid.U
 		VerificationID: pgUUID(verID),
 		CompanyID:      companyID,
 	}); err != nil {
-		return uuid.Nil, fmt.Errorf("store: finalize invoice: %w", err)
+		return uuid.Nil, "", fmt.Errorf("store: finalize invoice: %w", err)
 	}
 	if err := s.logAudit(ctx, qtx, companyID, "finalize_invoice", "invoice", invoiceID.String(), number+" "+inv.GrossSEK().String()+" SEK"); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, "", err
 	}
-	return verID, nil
+	return verID, number, nil
 }
 
 // ExportSIE builds a SIE type 4 export from the company, its chart and all
@@ -192,20 +204,35 @@ func (s *Store) ExportSIE(ctx context.Context, companyID uuid.UUID, generated ti
 // InvoiceView is a fully-resolved invoice for rendering (customer decrypted,
 // amounts computed). It is what the PDF template and the operator UI consume.
 type InvoiceView struct {
-	Number       string
-	Status       string
-	Date         time.Time
-	DueDate      time.Time
-	CompanyName  string
-	CompanyOrgNr string
-	Customer     Counterparty
-	Lines        []InvoiceViewLine
-	Net          ledger.Amount
-	VAT          ledger.Amount
-	Total        ledger.Amount
-	Currency     string
-	TotalSEK     ledger.Amount // gross booked to Kundfordringar in SEK
-	OCR          string
+	Number           string
+	Status           string
+	Date             time.Time
+	DueDate          time.Time
+	CompanyName      string
+	CompanyOrgNr     string
+	CompanyMomsRegNr string
+	CompanyAddress   string
+	CompanyPostal    string // "111 22 Stockholm"
+	CompanyFSkatt    bool
+	Bankgiro         string
+	IBAN             string
+	Customer         Counterparty
+	Lines            []InvoiceViewLine
+	VATSummary       []VATSummaryRow // net + VAT per rate/treatment (legal breakout)
+	LegalNotes       []string        // reverse-charge / export references
+	Net              ledger.Amount
+	VAT              ledger.Amount
+	Total            ledger.Amount
+	Currency         string
+	TotalSEK         ledger.Amount // gross booked to Kundfordringar in SEK
+	OCR              string
+}
+
+// VATSummaryRow is one row of the per-rate VAT breakout required on a faktura.
+type VATSummaryRow struct {
+	Label string
+	Net   ledger.Amount
+	VAT   ledger.Amount
 }
 
 // InvoiceViewLine is a rendered invoice line.
@@ -213,7 +240,7 @@ type InvoiceViewLine struct {
 	Description   string
 	QuantityMilli int64
 	UnitPrice     ledger.Amount
-	VATRate       int
+	VATLabel      string // "25 %", "Omvänd", "Export"
 	Net           ledger.Amount
 	VAT           ledger.Amount
 }
@@ -241,22 +268,31 @@ func (s *Store) InvoiceForRender(ctx context.Context, companyID, invoiceID uuid.
 	}
 
 	view := InvoiceView{
-		Number:       dbInv.Number,
-		Status:       dbInv.Status,
-		Date:         dbInv.InvoiceDate.Time,
-		DueDate:      dbInv.DueDate.Time,
-		CompanyName:  co.Name,
-		CompanyOrgNr: co.Orgnr,
-		Customer:     cust,
-		Currency:     dbInv.Currency,
-		OCR:          dbInv.Ocr,
+		Number:           dbInv.Number,
+		Status:           dbInv.Status,
+		Date:             dbInv.InvoiceDate.Time,
+		DueDate:          dbInv.DueDate.Time,
+		CompanyName:      co.Name,
+		CompanyOrgNr:     co.Orgnr,
+		CompanyMomsRegNr: co.Momsregnr,
+		CompanyAddress:   co.Address,
+		CompanyPostal:    strings.TrimSpace(co.PostalCode + " " + co.City),
+		CompanyFSkatt:    co.Fskatt,
+		Bankgiro:         co.Bankgiro,
+		IBAN:             co.Iban,
+		Customer:         cust,
+		Currency:         dbInv.Currency,
+		OCR:              dbInv.Ocr,
 	}
 	inv := invoice.Invoice{Currency: dbInv.Currency, RatePPM: dbInv.RatePpm}
+	sumIdx := map[moms.Code]int{} // code -> index into view.VATSummary (order preserved)
+	seenNote := map[string]bool{}
 	for _, r := range lineRows {
+		code := moms.Code(r.VatCode)
 		l := invoice.Line{
 			QuantityMilli: r.QuantityMilli,
 			UnitPriceOre:  ledger.Amount(r.UnitPriceOre),
-			VATCode:       moms.Code(r.VatCode),
+			VATCode:       code,
 		}
 		inv.Lines = append(inv.Lines, l)
 		net, vat := l.Net(), l.VAT()
@@ -264,12 +300,24 @@ func (s *Store) InvoiceForRender(ctx context.Context, companyID, invoiceID uuid.
 			Description:   r.Description,
 			QuantityMilli: r.QuantityMilli,
 			UnitPrice:     ledger.Amount(r.UnitPriceOre),
-			VATRate:       int(moms.Code(r.VatCode).Rate()),
+			VATLabel:      code.LineLabel(),
 			Net:           net,
 			VAT:           vat,
 		})
 		view.Net += net
 		view.VAT += vat
+		// Per-rate VAT breakout (legal requirement on a faktura).
+		if i, ok := sumIdx[code]; ok {
+			view.VATSummary[i].Net += net
+			view.VATSummary[i].VAT += vat
+		} else {
+			sumIdx[code] = len(view.VATSummary)
+			view.VATSummary = append(view.VATSummary, VATSummaryRow{Label: code.Label(), Net: net, VAT: vat})
+		}
+		if note := code.LegalNote(); note != "" && !seenNote[note] {
+			seenNote[note] = true
+			view.LegalNotes = append(view.LegalNotes, note)
+		}
 	}
 	view.Total = view.Net + view.VAT
 	view.TotalSEK = inv.GrossSEK()
@@ -283,27 +331,39 @@ func (s *Store) RenderInvoicePDF(ctx context.Context, g *render.Gotenberg, compa
 		return nil, err
 	}
 	ri := render.Invoice{
-		Number:          v.Number,
-		Date:            fmtDate(v.Date),
-		DueDate:         fmtDate(v.DueDate),
-		CompanyName:     v.CompanyName,
-		CompanyOrgNr:    v.CompanyOrgNr,
-		CustomerName:    v.Customer.Name,
-		CustomerOrgNr:   v.Customer.OrgNr,
-		CustomerAddress: v.Customer.Address,
-		OCR:             v.OCR,
-		Currency:        v.Currency,
-		NetKr:           v.Net.String(),
-		VATKr:           v.VAT.String(),
-		TotalKr:         v.Total.String(),
+		Number:           v.Number,
+		Date:             fmtDate(v.Date),
+		DueDate:          fmtDate(v.DueDate),
+		CompanyName:      v.CompanyName,
+		CompanyOrgNr:     v.CompanyOrgNr,
+		CompanyMomsRegNr: v.CompanyMomsRegNr,
+		CompanyAddress:   v.CompanyAddress,
+		CompanyPostal:    v.CompanyPostal,
+		CompanyFSkatt:    v.CompanyFSkatt,
+		Bankgiro:         v.Bankgiro,
+		IBAN:             v.IBAN,
+		CustomerName:     v.Customer.Name,
+		CustomerOrgNr:    v.Customer.OrgNr,
+		CustomerAddress:  v.Customer.Address,
+		OCR:              v.OCR,
+		Currency:         v.Currency,
+		LegalNotes:       v.LegalNotes,
+		NetKr:            v.Net.String(),
+		VATKr:            v.VAT.String(),
+		TotalKr:          v.Total.String(),
 	}
 	for _, l := range v.Lines {
 		ri.Lines = append(ri.Lines, render.InvoiceLine{
 			Description: l.Description,
 			Quantity:    milliStr(l.QuantityMilli),
 			UnitPrice:   l.UnitPrice.String(),
-			VATRate:     fmt.Sprintf("%d %%", l.VATRate),
+			VATLabel:    l.VATLabel,
 			Net:         l.Net.String(),
+		})
+	}
+	for _, vs := range v.VATSummary {
+		ri.VATSummary = append(ri.VATSummary, render.VATRow{
+			Label: vs.Label, NetKr: vs.Net.String(), VATKr: vs.VAT.String(),
 		})
 	}
 	return render.RenderInvoicePDF(ctx, g, ri)

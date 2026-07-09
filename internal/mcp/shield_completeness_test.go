@@ -20,8 +20,9 @@ var safeFields = map[string]bool{
 	"output_vat_kr": true, "input_vat_kr": true, "moms_to_pay_kr": true,
 	"unpaid_total_kr": true, "total_net_kr": true,
 	"box_05_net_sales_kr": true, "box_10_output_25_kr": true, "box_11_output_12_kr": true,
-	"box_12_output_6_kr": true, "box_30_reverse_charge_output_kr": true,
-	"box_39_eu_services_kr": true, "box_48_input_kr": true, "box_49_to_pay_kr": true,
+	"box_12_output_6_kr": true, "box_21_eu_services_bought_kr": true,
+	"box_22_non_eu_services_bought_kr": true, "box_30_reverse_charge_output_kr": true,
+	"box_39_eu_services_sold_kr": true, "box_48_input_kr": true, "box_49_to_pay_kr": true,
 	"at": true, "actor": true, "action": true, "target": true,
 	"total": true, "currency": true, "total_sek": true,
 	// invoice_number is a sequential business key (e.g. 2026-0001), not an

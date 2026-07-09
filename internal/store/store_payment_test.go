@@ -25,7 +25,7 @@ func TestRecordPaymentSEK(t *testing.T) {
 	invID, _ := s.CreateInvoice(ctx, co, cust, invoice.Invoice{Lines: []invoice.Line{
 		{Description: "Konsultarvode", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(10000, 0), VATCode: moms.SE25},
 	}})
-	if _, err := s.FinalizeInvoice(ctx, co, invID, "2026-0001", day("2026-02-01"), day("2026-03-03")); err != nil {
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 	view, _ := s.InvoiceForRender(ctx, co, invID)
@@ -69,7 +69,7 @@ func TestRecordPaymentSEKMismatchRejected(t *testing.T) {
 	invID, _ := s.CreateInvoice(ctx, co, cust, invoice.Invoice{Lines: []invoice.Line{
 		{Description: "Tjänst", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(10000, 0), VATCode: moms.SE25},
 	}})
-	if _, err := s.FinalizeInvoice(ctx, co, invID, "2026-0001", day("2026-02-01"), day("2026-03-03")); err != nil {
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 	view, _ := s.InvoiceForRender(ctx, co, invID)
@@ -105,7 +105,7 @@ func TestRecordPaymentFXGain(t *testing.T) {
 			{Description: "Retainer", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(1000, 0), VATCode: moms.SE25},
 		},
 	})
-	if _, err := s.FinalizeInvoice(ctx, co, invID, "2026-0002", day("2026-02-01"), day("2026-03-03")); err != nil {
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 	view, _ := s.InvoiceForRender(ctx, co, invID)
@@ -150,7 +150,7 @@ func TestRecordPaymentFXLoss(t *testing.T) {
 			{Description: "Retainer", QuantityMilli: 1000, UnitPriceOre: ledger.SEK(1000, 0), VATCode: moms.SE25},
 		},
 	})
-	if _, err := s.FinalizeInvoice(ctx, co, invID, "2026-0003", day("2026-02-01"), day("2026-03-03")); err != nil {
+	if _, _, err := s.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 

@@ -54,7 +54,7 @@ func setup(t *testing.T) (http.Handler, func()) {
 	if err != nil {
 		t.Fatalf("invoice: %v", err)
 	}
-	if _, err := st.FinalizeInvoice(ctx, co, invID, "2026-0001", day("2026-02-01"), day("2026-03-03")); err != nil {
+	if _, _, err := st.FinalizeInvoice(ctx, co, invID, day("2026-02-01"), day("2026-03-03")); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 
