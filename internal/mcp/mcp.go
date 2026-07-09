@@ -12,15 +12,49 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	gen "github.com/brightinteraction/pare/internal/db/generated"
+	"github.com/brightinteraction/pare/internal/ledger"
 	"github.com/brightinteraction/pare/internal/shield"
 	"github.com/brightinteraction/pare/internal/store"
 )
+
+// errInvalidArgs / errBadDate are operator-safe validation sentinels surfaced by
+// the write tools (scrubError passes them through).
+var (
+	errInvalidArgs = errors.New("invalid arguments")
+	errBadDate     = errors.New("date must be YYYY-MM-DD")
+)
+
+// scrubError keeps internal plumbing (pgx/driver strings, DB host:port, wrapped
+// store errors) out of the LLM-facing tool result: only known operator-meaningful
+// sentinels pass through; everything else collapses to a generic message. The
+// full error is logged server-side by the caller.
+func scrubError(err error) string {
+	switch {
+	case errors.Is(err, ledger.ErrUnbalanced),
+		errors.Is(err, ledger.ErrTooFewLines),
+		errors.Is(err, ledger.ErrLineSide),
+		errors.Is(err, ledger.ErrNoAccount),
+		errors.Is(err, ledger.ErrNegative),
+		errors.Is(err, store.ErrPeriodClosed),
+		errors.Is(err, store.ErrUnknownAccount),
+		errors.Is(err, store.ErrForeignCompany),
+		errors.Is(err, store.ErrNotDraft),
+		errors.Is(err, store.ErrNoCompany),
+		errors.Is(err, errInvalidArgs),
+		errors.Is(err, errBadDate):
+		return err.Error()
+	default:
+		return "internal error"
+	}
+}
 
 // Server is the Pare MCP endpoint.
 type Server struct {
@@ -180,7 +214,8 @@ func (s *Server) callTool(ctx context.Context, r *http.Request, req rpcReq, ok f
 	sess := s.shield.Session(sessionID(r))
 	res, err := t.run(ctx, toolCtx{store: s.store, sess: sess, company: company}, p.Arguments)
 	if err != nil {
-		return toolError(ok, err.Error())
+		slog.Error("mcp tool error", "tool", p.Name, "err", err)
+		return toolError(ok, scrubError(err))
 	}
 	// Tokenize identities before the result crosses to the LLM.
 	if err := sess.ShieldStruct(ctx, res); err != nil {

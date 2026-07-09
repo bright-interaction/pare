@@ -4,11 +4,8 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -144,7 +141,7 @@ type momsResult struct {
 type sieResult struct {
 	Filename     string `json:"filename"`
 	VoucherCount int    `json:"voucher_count"`
-	SIEBase64    string `json:"sie_base64"`
+	Note         string `json:"note"`
 }
 
 type postResult struct {
@@ -161,7 +158,9 @@ type auditRow struct {
 	Actor  string `json:"actor"`
 	Action string `json:"action"`
 	Target string `json:"target"`
-	Detail string `json:"detail"`
+	// Detail is intentionally omitted: audit_log.detail can carry operator
+	// free-text (e.g. a period-unlock reason) that may contain identities, which
+	// must not cross the LLM boundary. The full detail stays in the UI logg.
 }
 
 // --- handlers ---
@@ -247,18 +246,18 @@ func runMoms(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) {
 }
 
 func runExportSIE(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) {
+	// The SIE file embeds the company org-nr and every voucher's free-text
+	// description, which can carry counterparty identities. Shield cannot
+	// tokenize inside an opaque blob, so the raw file is NOT returned across the
+	// LLM boundary; report only its shape and point to the UI download.
 	exp, err := tc.store.ExportSIE(ctx, tc.company, time.Now().UTC())
 	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	if err := exp.Write(&buf); err != nil {
 		return nil, err
 	}
 	return &sieResult{
 		Filename:     "pare-export.se",
 		VoucherCount: len(exp.Vouchers),
-		SIEBase64:    base64.StdEncoding.EncodeToString(buf.Bytes()),
+		Note:         "The SIE file contains identifying free text and is not exposed to the assistant. Download it from the Rapporter page in the Pare UI.",
 	}, nil
 }
 
@@ -274,7 +273,6 @@ func runAudit(ctx context.Context, tc toolCtx, _ json.RawMessage) (any, error) {
 			Actor:  e.Actor,
 			Action: e.Action,
 			Target: e.TargetType + ":" + e.TargetID,
-			Detail: e.Detail,
 		})
 	}
 	return res, nil
@@ -293,11 +291,11 @@ func runPostVerification(ctx context.Context, tc toolCtx, args json.RawMessage) 
 		} `json:"lines"`
 	}
 	if err := json.Unmarshal(args, &in); err != nil {
-		return nil, fmt.Errorf("invalid arguments: %w", err)
+		return nil, errInvalidArgs
 	}
 	date, err := time.Parse("2006-01-02", in.Date)
 	if err != nil {
-		return nil, fmt.Errorf("date must be YYYY-MM-DD")
+		return nil, errBadDate
 	}
 	lines := make([]ledger.Line, 0, len(in.Lines))
 	for _, l := range in.Lines {

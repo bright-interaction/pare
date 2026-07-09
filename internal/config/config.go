@@ -46,6 +46,10 @@ func Load() (*Config, error) {
 	}
 	c.ShieldKey = sk
 
+	if c.MCPKey != "" && len(c.MCPKey) < 16 {
+		return nil, fmt.Errorf("config: PARE_MCP_KEY must be at least 16 characters")
+	}
+
 	return c, nil
 }
 

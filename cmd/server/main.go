@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -74,7 +75,15 @@ func main() {
 	}
 
 	slog.Info("pare starting", "addr", cfg.Addr)
-	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Routes()}
+	httpSrv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           srv.Routes(),
+		ReadHeaderTimeout: 10 * time.Second, // Slowloris mitigation
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second, // PDF render can take up to ~60s
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server", "err", err)
 		os.Exit(1)

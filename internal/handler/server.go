@@ -33,6 +33,7 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(maxBody)
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(securityHeaders)
 
@@ -53,12 +54,14 @@ func (s *Server) Routes() http.Handler {
 
 	// Operator web UI (server-rendered, session cookie auth).
 	if s.Auth != nil && s.Store != nil {
+		// Strict per-IP limit on the auth surface (brute-force / abuse).
+		authLimit := httprate.LimitByIP(10, time.Minute)
 		r.Get("/", s.handleRoot)
 		r.Get("/setup", s.handleSetupForm)
-		r.Post("/setup", s.handleSetup)
+		r.With(authLimit).Post("/setup", s.handleSetup)
 		r.Get("/login", s.handleLoginForm)
-		r.Post("/login", s.handleLogin)
-		r.Post("/logout", s.handleLogout)
+		r.With(authLimit).Post("/login", s.handleLogin)
+		r.With(authLimit).Post("/logout", s.handleLogout)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireSession)
@@ -91,6 +94,20 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// script-src falls back to default-src 'none' (no inline/remote JS in
+		// the app); the UI's single inline <style> is allowed via style-src.
+		h.Set("Content-Security-Policy",
+			"default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+		h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// maxBody caps every request body at 1 MiB so ParseForm and JSON decoding can't
+// be used to exhaust memory (the /mcp handler additionally caps its own body).
+func maxBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		next.ServeHTTP(w, r)
 	})
 }

@@ -117,12 +117,15 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		render(w, "setup", pageData{Title: "Kom igång", Error: "Fyll i alla fält (lösenord minst 8 tecken)."}, http.StatusBadRequest)
 		return
 	}
-	if err := s.Auth.CreateUser(r.Context(), email, pw); err != nil {
-		render(w, "setup", pageData{Title: "Kom igång", Error: "Kunde inte skapa konto."}, http.StatusBadRequest)
+	// Company first: a DB singleton (migration 00008) makes a concurrent second
+	// BootstrapCompany fail here, before any user is created, closing the
+	// first-user-wins race without an orphan user.
+	if _, err := s.Store.BootstrapCompany(r.Context(), company, orgnr); err != nil {
+		render(w, "setup", pageData{Title: "Kom igång", Error: "Kunde inte skapa företaget (det kan redan finnas ett)."}, http.StatusBadRequest)
 		return
 	}
-	if _, err := s.Store.BootstrapCompany(r.Context(), company, orgnr); err != nil {
-		s.fail(w, err)
+	if err := s.Auth.CreateUser(r.Context(), email, pw); err != nil {
+		render(w, "setup", pageData{Title: "Kom igång", Error: "Kunde inte skapa konto."}, http.StatusBadRequest)
 		return
 	}
 	if token, err := s.Auth.Login(r.Context(), email, pw); err == nil {
@@ -369,8 +372,8 @@ func (s *Server) handleCSV(w http.ResponseWriter, r *http.Request) {
 				credit = -l.Amount
 			}
 			_ = cw.Write([]string{
-				v.Date.Format("2006-01-02"), v.Series, strconv.Itoa(v.Number), l.Account,
-				strconv.FormatInt(debit, 10), strconv.FormatInt(credit, 10), v.Text,
+				v.Date.Format("2006-01-02"), v.Series, strconv.Itoa(v.Number), csvSafe(l.Account),
+				strconv.FormatInt(debit, 10), strconv.FormatInt(credit, 10), csvSafe(v.Text),
 			})
 		}
 	}
@@ -584,4 +587,18 @@ func parseRatePPM(s string) int64 {
 		return 1_000_000
 	}
 	return int64(math.Round(f * 1_000_000))
+}
+
+// csvSafe neutralizes spreadsheet formula injection: a cell beginning with a
+// formula trigger is prefixed with an apostrophe so Excel/LibreOffice/Sheets
+// treat it as text.
+func csvSafe(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
 }
