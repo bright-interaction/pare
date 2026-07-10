@@ -40,6 +40,10 @@ at year-end.
 - Leverantörsfaktura (AP) with förvärvsmoms self-assessment on foreign services.
 - Moms: full momsdeklaration boxes (rutor), period-scoped.
 - SIE 4 import (with #IB opening balances) and export (with #IB/#UB/#RES).
+- Bank reconciliation: import a camt.053 or CSV statement, auto-match credits to
+  open invoices, one-click book (or categorize to any account). The payer text is
+  encrypted at rest and never crosses the AI boundary.
+- Receipts/underlag: encrypted document capture attached to supplier invoices.
 - Reports: resultat- + balansräkning (period-correct), momsdeklaration, huvudbok,
   verifikationslista, reskontra (aged receivables + payables), CSV.
 - Year-end close (bokslut) with first-class fiscal years + period lock.
@@ -61,6 +65,10 @@ at year-end.
 | `PARE_SMTP_HOST/PORT/USER/PASS/FROM/FROM_NAME/TLS` | no | email (no-op if unset) |
 | `FLARE_DSN` | no | error reporting to the house Flare instance |
 | `PARE_INSECURE_COOKIES` | no | `1` disables Secure cookies for local HTTP dev |
+
+See `.env.example` for the full list with comments, including the next-step
+integration placeholders (PSD2 bank feed, Mollie payment gateway). The live
+config status (email/MCP/Flare on or off) is shown on the in-app `/api` page.
 
 ## API (MCP)
 
