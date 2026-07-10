@@ -10,8 +10,8 @@ package invoice
 import (
 	"time"
 
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
 )
 
 // Line is one invoice row. Quantity is in milli-units (1000 = 1.0) so hours or

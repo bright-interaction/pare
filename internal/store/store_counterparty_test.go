@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/invoice"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/invoice"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
 )
 
 func TestUpdateCounterparty(t *testing.T) {

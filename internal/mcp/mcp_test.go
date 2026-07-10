@@ -12,12 +12,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/brightinteraction/pare/internal/crypto"
-	"github.com/brightinteraction/pare/internal/invoice"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
-	"github.com/brightinteraction/pare/internal/store"
-	"github.com/brightinteraction/pare/internal/testdb"
+	"github.com/bright-interaction/pare/internal/crypto"
+	"github.com/bright-interaction/pare/internal/invoice"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/store"
+	"github.com/bright-interaction/pare/internal/testdb"
 )
 
 const testKey = "test-mcp-key"

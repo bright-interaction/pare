@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 // Closing a fiscal year posts the result to 2099, locks the period, and keeps the

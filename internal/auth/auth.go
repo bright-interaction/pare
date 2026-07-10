@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
 )
 
 // CookieName is the session cookie name.

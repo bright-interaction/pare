@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/brightinteraction/pare/internal/crypto"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/testdb"
+	"github.com/bright-interaction/pare/internal/crypto"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/testdb"
 )
 
 func testStore(t *testing.T) (*Store, *pgxpool.Pool) {

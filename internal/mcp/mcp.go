@@ -19,10 +19,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/shield"
-	"github.com/brightinteraction/pare/internal/store"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/shield"
+	"github.com/bright-interaction/pare/internal/store"
 )
 
 // errInvalidArgs / errBadDate are operator-safe validation sentinels surfaced by

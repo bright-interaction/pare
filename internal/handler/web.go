@@ -22,16 +22,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/brightinteraction/pare/internal/auth"
-	"github.com/brightinteraction/pare/internal/bank"
-	"github.com/brightinteraction/pare/internal/email"
-	"github.com/brightinteraction/pare/internal/flarereport"
-	"github.com/brightinteraction/pare/internal/invoice"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/mcp"
-	"github.com/brightinteraction/pare/internal/moms"
-	"github.com/brightinteraction/pare/internal/sie"
-	"github.com/brightinteraction/pare/internal/store"
+	"github.com/bright-interaction/pare/internal/auth"
+	"github.com/bright-interaction/pare/internal/bank"
+	"github.com/bright-interaction/pare/internal/email"
+	"github.com/bright-interaction/pare/internal/flarereport"
+	"github.com/bright-interaction/pare/internal/invoice"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/mcp"
+	"github.com/bright-interaction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/sie"
+	"github.com/bright-interaction/pare/internal/store"
 )
 
 type ctxKey int

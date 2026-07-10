@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
 )
 
 // SupplierInvoiceView is a resolved supplier invoice (supplier decrypted, amounts
