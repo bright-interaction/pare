@@ -1,0 +1,47 @@
+# Self-host Pare: the app + Postgres + gotenberg (for PDF), all local.
+# 1. cp ../.env.example ../.env  and fill PARE_MASTER_KEY etc.
+# 2. docker compose up -d
+# 3. open http://localhost:8080
+services:
+  app:
+    build:
+      context: ..
+    container_name: pare
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      PARE_ADDR: ":8080"
+      PARE_DATABASE_URL: "postgres://pare:${PARE_POSTGRES_PASSWORD:-changeme}@pare-postgres:5432/pare?sslmode=disable"
+      PARE_GOTENBERG_URL: "http://pare-gotenberg:3000"
+    ports:
+      - "8080:8080"
+    depends_on:
+      pare-postgres:
+        condition: service_healthy
+      pare-gotenberg:
+        condition: service_started
+
+  pare-postgres:
+    image: postgres:16-alpine
+    container_name: pare-postgres
+    environment:
+      POSTGRES_DB: pare
+      POSTGRES_USER: pare
+      POSTGRES_PASSWORD: ${PARE_POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - pare-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pare -d pare"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  pare-gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: pare-gotenberg
+    restart: unless-stopped
+
+volumes:
+  pare-pgdata:

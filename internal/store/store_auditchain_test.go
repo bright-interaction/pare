@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 // The audit hash chain is intact after normal activity and detects a tampered

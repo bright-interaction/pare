@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/auth"
+	"github.com/bright-interaction/pare/internal/auth"
 )
 
 func TestBlockViewerWrites(t *testing.T) {

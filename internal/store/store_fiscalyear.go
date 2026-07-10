@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/ledger"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 // closeSeries is the voucher series for year-end close (bokslut) entries. The

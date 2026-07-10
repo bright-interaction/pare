@@ -13,9 +13,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/brightinteraction/pare/internal/bank"
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/bank"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 // ErrTxnNotOpen is returned when booking/ignoring a transaction that is not open.

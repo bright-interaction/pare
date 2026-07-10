@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 // ErrNoCompany is returned when no company has been bootstrapped yet.

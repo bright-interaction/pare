@@ -63,7 +63,7 @@ at year-end.
 | `PARE_MCP_MAX_ORE` | no | per-AI-write ceiling in öre (default 50 000 000) |
 | `PARE_GOTENBERG_URL` | no | PDF renderer (default `http://gotenberg:3000`) |
 | `PARE_SMTP_HOST/PORT/USER/PASS/FROM/FROM_NAME/TLS` | no | email (no-op if unset) |
-| `FLARE_DSN` | no | error reporting to the house Flare instance |
+| `FLARE_DSN` | no | error reporting to a Sentry-compatible sink |
 | `PARE_INSECURE_COOKIES` | no | `1` disables Secure cookies for local HTTP dev |
 
 See `.env.example` for the full list with comments, including the next-step
@@ -99,16 +99,17 @@ SIE 4 (Fortnox/Visma/accountant), Gotenberg (PDF), SMTP (Resend/SES), Flare
 - `internal/render` gotenberg PDF client + invoice template
 - `internal/config`, `internal/db` (goose migrations + sqlc), `cmd/server`
 
-## Build, test, deploy
+## Build, test, run
 
 ```
 go build ./...
 # tests need a Postgres:  PARE_TEST_DATABASE_URL=postgres://... go test ./...
 ```
 
-Deploys via Hephaestus on push to `main` touching `pare/**` (see
-`hephaestus/userworkflows/deploy_pare.go`). Migrations run on boot (goose);
-`SyncChart` backfills chart additions.
+To self-host, copy `.env.example` to `.env`, fill `PARE_MASTER_KEY` (and the MCP
+keys if you want the AI assistant), then `docker compose -f deploy/docker-compose.yml up -d`
+and open http://localhost:8080. Migrations run on boot (goose); `SyncChart`
+backfills chart additions.
 
 ## License
 
