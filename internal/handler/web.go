@@ -4,6 +4,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/brightinteraction/pare/internal/auth"
+	"github.com/brightinteraction/pare/internal/bank"
 	"github.com/brightinteraction/pare/internal/email"
 	"github.com/brightinteraction/pare/internal/flarereport"
 	"github.com/brightinteraction/pare/internal/invoice"
@@ -1093,6 +1095,121 @@ type reskontraData struct {
 	Suppliers        []suppReskontraRow
 	ReceivablesTotal ledger.Amount
 	PayablesTotal    ledger.Amount
+}
+
+// --- bank reconciliation ---
+
+type bankData struct {
+	Transactions []store.BankTxnView
+	BankAccounts []ledger.Account
+	Accounts     []ledger.Account
+}
+
+func (s *Server) handleBank(w http.ResponseWriter, r *http.Request) {
+	co, ctx := companyID(r), r.Context()
+	txns, err := s.Store.ListBankTransactions(ctx, co)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	accts, _ := s.Store.ChartAccounts(ctx, co)
+	var banks []ledger.Account
+	for _, a := range accts {
+		if strings.HasPrefix(a.Number, "19") {
+			banks = append(banks, a)
+		}
+	}
+	pd := s.base(r, "Bank")
+	switch r.URL.Query().Get("msg") {
+	case "imported":
+		pd.Flash = "Kontoutdraget importerades (dubbletter hoppades över)."
+	case "parsefail":
+		pd.Error = "Filen kunde inte tolkas (stöd: camt.053 XML eller CSV)."
+	case "mismatch":
+		pd.Error = "Beloppet matchar inte fakturans utestående. Kontera manuellt i stället."
+	}
+	pd.Data = bankData{Transactions: txns, BankAccounts: banks, Accounts: accts}
+	render(w, "bank", pd, http.StatusOK)
+}
+
+func (s *Server) handleBankImport(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		http.Redirect(w, r, "/bank", http.StatusSeeOther)
+		return
+	}
+	f, _, err := r.FormFile("file")
+	if err != nil {
+		http.Redirect(w, r, "/bank", http.StatusSeeOther)
+		return
+	}
+	defer f.Close()
+	content, err := io.ReadAll(f)
+	if err != nil || len(content) == 0 {
+		http.Redirect(w, r, "/bank?msg=parsefail", http.StatusSeeOther)
+		return
+	}
+	var entries []bank.Entry
+	if bytes.HasPrefix(bytes.TrimSpace(content), []byte("<")) {
+		entries, err = bank.ParseCAMT(bytes.NewReader(content))
+	} else {
+		entries, err = bank.ParseCSV(bytes.NewReader(content))
+	}
+	if err != nil {
+		http.Redirect(w, r, "/bank?msg=parsefail", http.StatusSeeOther)
+		return
+	}
+	account := strings.TrimSpace(r.PostFormValue("bank_account"))
+	if _, err := s.Store.ImportBankStatement(r.Context(), companyID(r), account, entries); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/bank?msg=imported", http.StatusSeeOther)
+}
+
+func (s *Server) handleBankBookInvoice(w http.ResponseWriter, r *http.Request) {
+	txnID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = r.ParseForm()
+	invID, err := uuid.Parse(r.PostFormValue("invoice_id"))
+	if err != nil {
+		http.Redirect(w, r, "/bank", http.StatusSeeOther)
+		return
+	}
+	switch err := s.Store.BookBankTxnToInvoice(r.Context(), companyID(r), txnID, invID); {
+	case err == nil:
+		http.Redirect(w, r, "/bank", http.StatusSeeOther)
+	case errors.Is(err, store.ErrPaymentMismatch):
+		http.Redirect(w, r, "/bank?msg=mismatch", http.StatusSeeOther)
+	default:
+		s.fail(w, err)
+	}
+}
+
+func (s *Server) handleBankBookAccount(w http.ResponseWriter, r *http.Request) {
+	txnID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.Store.BookBankTxnToAccount(r.Context(), companyID(r), txnID, strings.TrimSpace(r.PostFormValue("account"))); err != nil {
+		s.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/bank", http.StatusSeeOther)
+}
+
+func (s *Server) handleBankIgnore(w http.ResponseWriter, r *http.Request) {
+	txnID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = s.Store.IgnoreBankTxn(r.Context(), companyID(r), txnID)
+	http.Redirect(w, r, "/bank", http.StatusSeeOther)
 }
 
 // handleReskontra shows the kundreskontra (open customer invoices, aged) and

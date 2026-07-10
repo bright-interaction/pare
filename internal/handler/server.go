@@ -109,6 +109,11 @@ func (s *Server) Routes() http.Handler {
 				r.Post("/verifications/{id}/undo", s.handleUndo)
 				r.Get("/reports", s.handleReports)
 				r.Get("/reskontra", s.handleReskontra)
+				r.Get("/bank", s.handleBank)
+				r.Post("/bank/import", s.handleBankImport)
+				r.Post("/bank/{id}/book-invoice", s.handleBankBookInvoice)
+				r.Post("/bank/{id}/book-account", s.handleBankBookAccount)
+				r.Post("/bank/{id}/ignore", s.handleBankIgnore)
 				r.Get("/bokslut", s.handleFiscalYears)
 				r.Post("/bokslut", s.handleAddFiscalYear)
 				r.Post("/bokslut/{id}/close", s.handleCloseFiscalYear)
@@ -155,6 +160,8 @@ func maxBody(next http.Handler) http.Handler {
 		case r.URL.Path == "/sie/import": // a full year's SIE file
 			limit = 16 << 20
 		case r.URL.Path == "/kvitton" || r.URL.Path == "/supplier-invoices": // receipt uploads
+			limit = 16 << 20
+		case r.URL.Path == "/bank/import": // bank statement upload
 			limit = 16 << 20
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, limit)

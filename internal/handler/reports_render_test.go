@@ -65,6 +65,15 @@ func TestFormTemplatesRender(t *testing.T) {
 
 	renderOK(t, "sie_import", pageData{Title: "Importera SIE", Email: "op@x.se", CSRF: "tok"}, "Importera SIE", `name="csrf" value="tok"`)
 
+	renderOK(t, "bank", pageData{Title: "Bank", Email: "op@x.se", CSRF: "tok", Data: bankData{
+		Transactions: []store.BankTxnView{
+			{ID: [16]byte{9}, Date: time.Now(), Amount: ledger.SEK(12500, 0), Text: "Kund AB", Status: "unmatched", IsCredit: true, MatchNumber: "2026-0001", MatchID: [16]byte{3}, MatchCustomer: "Kund AB"},
+			{ID: [16]byte{10}, Date: time.Now(), Amount: -ledger.SEK(2500, 0), Text: "Anthropic", Status: "unmatched"},
+		},
+		BankAccounts: []ledger.Account{{Number: "1930", Name: "Företagskonto"}},
+		Accounts:     []ledger.Account{{Number: "6540", Name: "IT-tjänster"}},
+	}}, "Bank och avstämning", "Bokför mot 2026-0001", "Kontera")
+
 	renderOK(t, "kvitton", pageData{Title: "Kvitton", Email: "op@x.se", CSRF: "tok", Data: []store.DocumentMeta{
 		{ID: [16]byte{7}, Filename: "kvitto.pdf", Note: "Anthropic", Attached: false, CreatedAt: time.Now()},
 	}}, "Kvitton och underlag", "krypteras", "Bokför som kostnad")

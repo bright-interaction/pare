@@ -31,6 +31,21 @@ type AuditLog struct {
 	EntryHash   string             `json:"entry_hash"`
 }
 
+type BankTransaction struct {
+	ID               uuid.UUID          `json:"id"`
+	CompanyID        uuid.UUID          `json:"company_id"`
+	TxnDate          pgtype.Date        `json:"txn_date"`
+	AmountOre        int64              `json:"amount_ore"`
+	TextEnc          string             `json:"text_enc"`
+	Ref              string             `json:"ref"`
+	BankAccount      string             `json:"bank_account"`
+	Fingerprint      string             `json:"fingerprint"`
+	Status           string             `json:"status"`
+	MatchedInvoiceID pgtype.UUID        `json:"matched_invoice_id"`
+	VerificationID   pgtype.UUID        `json:"verification_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type Company struct {
 	ID            uuid.UUID          `json:"id"`
 	Name          string             `json:"name"`
