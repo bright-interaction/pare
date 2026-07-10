@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: LicenseRef-Pare-Sustainable-Use-License
 // Copyright (c) Bright Interaction
 
 // Package mcp exposes Pare over the Model Context Protocol (JSON-RPC 2.0) so an
