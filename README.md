@@ -113,5 +113,8 @@ backfills chart additions.
 
 ## License
 
-Core: AGPL-3.0-or-later. A private `pro` build overlay (Go build tag `pro`) is
-reserved for multi-company, bank feeds, Peppol, payroll and the hosted SaaS.
+Fair-code under the Pare Sustainable Use License (see [LICENSE](LICENSE) and
+[LICENSING.md](LICENSING.md)): self-host and use it freely, even to keep your
+clients' books, but you can't resell it as a hosted service. A private `pro` build
+overlay (Go build tag `pro`) is held back for multi-company, bank feeds, Peppol,
+payroll and the hosted SaaS.

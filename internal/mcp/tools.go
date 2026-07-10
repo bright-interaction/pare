@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: LicenseRef-Pare-Sustainable-Use-License
 // Copyright (c) Bright Interaction
 
 package mcp
