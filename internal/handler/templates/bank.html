@@ -1,0 +1,35 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Bank och avstämning</h1>
+<p class="muted" style="max-width:700px">Importera ett kontoutdrag (camt.053 XML eller CSV från banken). Inbetalningar matchas automatiskt mot öppna fakturor - klicka Bokför så registreras betalningen på rätt konto. Övriga transaktioner konterar du mot valfritt konto. Transaktionstexten krypteras och skickas aldrig till AI-assistenten.</p>
+<form method="post" action="/bank/import" enctype="multipart/form-data" class="row" style="max-width:640px;margin-bottom:18px">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div><label>Kontoutdrag (camt.053 eller CSV)</label><input type="file" name="file" accept=".xml,.csv,text/csv,application/xml" required></div>
+  <div style="flex:0 0 170px"><label>Bankkonto</label><select name="bank_account">{{range $d.BankAccounts}}<option value="{{.Number}}">{{.Number}} {{.Name}}</option>{{end}}</select></div>
+  <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn" type="submit">Importera</button></div>
+</form>
+{{if $d.Transactions}}
+<table>
+  <tr><th>Datum</th><th>Text</th><th class="num">Belopp</th><th>Status</th><th>Åtgärd</th></tr>
+  {{range $d.Transactions}}<tr>
+    <td>{{.Date.Format "2006-01-02"}}</td>
+    <td>{{.Text}}{{if .Ref}} <span class="muted">({{.Ref}})</span>{{end}}</td>
+    <td class="num">{{.Amount}} kr</td>
+    <td>{{if eq .Status "unmatched"}}<span class="pill draft">att bokföra</span>{{else if eq .Status "booked"}}<span class="pill paid">bokförd</span>{{else}}<span class="pill draft">ignorerad</span>{{end}}</td>
+    <td>
+      {{if eq .Status "unmatched"}}
+        {{if .MatchNumber}}
+          <form method="post" action="/bank/{{.ID}}/book-invoice" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="invoice_id" value="{{.MatchID}}"><button class="btn small" type="submit">Bokför mot {{.MatchNumber}}</button></form>
+        {{end}}
+        <form method="post" action="/bank/{{.ID}}/book-account" style="display:inline">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <select name="account" style="width:auto;display:inline-block">{{range $d.Accounts}}<option value="{{.Number}}">{{.Number}} {{.Name}}</option>{{end}}</select>
+          <button class="btn small secondary" type="submit">Kontera</button>
+        </form>
+        <form method="post" action="/bank/{{.ID}}/ignore" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small danger" type="submit">Ignorera</button></form>
+      {{end}}
+    </td>
+  </tr>{{end}}
+</table>
+{{else}}<div class="empty">Inga transaktioner än. Importera ett kontoutdrag ovan.</div>{{end}}
+{{end}}
