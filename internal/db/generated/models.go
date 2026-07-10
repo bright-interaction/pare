@@ -63,6 +63,20 @@ type Counterparty struct {
 	EmailEnc        string             `json:"email_enc"`
 }
 
+type Document struct {
+	ID                uuid.UUID          `json:"id"`
+	CompanyID         uuid.UUID          `json:"company_id"`
+	Filename          string             `json:"filename"`
+	Mime              string             `json:"mime"`
+	ByteSize          int64              `json:"byte_size"`
+	ContentEnc        []byte             `json:"content_enc"`
+	Sha256            string             `json:"sha256"`
+	Note              string             `json:"note"`
+	SupplierInvoiceID pgtype.UUID        `json:"supplier_invoice_id"`
+	VerificationID    pgtype.UUID        `json:"verification_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type FiscalYear struct {
 	ID        uuid.UUID          `json:"id"`
 	CompanyID uuid.UUID          `json:"company_id"`

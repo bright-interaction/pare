@@ -25,6 +25,8 @@
   <tr><td>PDF (Gotenberg)</td><td>Fakturor renderas till PDF för utskrift och e-post.</td></tr>
   <tr><td>E-post (SMTP)</td><td>Skicka fakturor och betalningspåminnelser (kräver PARE_SMTP_*).</td></tr>
   <tr><td>Felrapportering (Flare)</td><td>Fel och krascher rapporteras till husets Flare-instans (kräver FLARE_DSN).</td></tr>
+  <tr><td>Kvitton och underlag</td><td>Ladda upp kvitton/underlag som krypteras vid uppladdning. Filerna lämnar aldrig Pare och skickas aldrig till AI-assistenten.</td></tr>
   <tr><td>MCP (Claude)</td><td>AI-assistenten sköter bokföringen via API:t ovan.</td></tr>
 </table>
+<p class="muted" style="margin-top:10px;max-width:680px">Dataskydd: alla integrationer bevarar Pares skydd. Identiteter och underlag krypteras i vila, tokeniseras vid AI-gränssnittet, och API-nycklar för externa tjänster förvaras i valvet, aldrig i klartext i databasen.</p>
 {{end}}

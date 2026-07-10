@@ -65,6 +65,10 @@ func TestFormTemplatesRender(t *testing.T) {
 
 	renderOK(t, "sie_import", pageData{Title: "Importera SIE", Email: "op@x.se", CSRF: "tok"}, "Importera SIE", `name="csrf" value="tok"`)
 
+	renderOK(t, "kvitton", pageData{Title: "Kvitton", Email: "op@x.se", CSRF: "tok", Data: []store.DocumentMeta{
+		{ID: [16]byte{7}, Filename: "kvitto.pdf", Note: "Anthropic", Attached: false, CreatedAt: time.Now()},
+	}}, "Kvitton och underlag", "krypteras", "Bokför som kostnad")
+
 	renderOK(t, "hjalp", pageData{Title: "Hjälp", Email: "op@x.se"}, "Kom igång", "Fakturera en kund", "MCP")
 	renderOK(t, "api", pageData{Title: "API", Email: "op@x.se", Data: apiData{Enabled: false}}, "API och integrationer", "Integrationer", "SIE")
 

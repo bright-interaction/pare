@@ -1,0 +1,27 @@
+{{define "content"}}
+<h1>Kvitton och underlag</h1>
+<p class="muted" style="max-width:680px">Ladda upp kvitton och leverantörsunderlag (PDF eller bild). Filerna krypteras direkt vid uppladdning och lämnar aldrig Pare - de skickas aldrig till AI-assistenten. Koppla ett kvitto till en leverantörsfaktura så blir det verifikationsunderlag och sparas enligt bokföringslagen.</p>
+<form method="post" action="/kvitton" enctype="multipart/form-data" class="row" style="max-width:640px;margin-bottom:18px">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div><label>Fil (PDF eller bild)</label><input type="file" name="file" accept="application/pdf,image/*" required></div>
+  <div><label>Notering</label><input name="note" placeholder="t.ex. Anthropic mars"></div>
+  <div style="flex:0 0 auto"><label>&nbsp;</label><button class="btn" type="submit">Ladda upp</button></div>
+</form>
+{{if .Data}}
+<table>
+  <tr><th>Fil</th><th>Notering</th><th>Uppladdad</th><th>Status</th><th></th></tr>
+  {{range .Data}}<tr>
+    <td><a href="/kvitton/{{.ID}}/file" target="_blank">{{.Filename}}</a></td>
+    <td class="muted">{{.Note}}</td>
+    <td class="muted">{{.CreatedAt.Format "2006-01-02"}}</td>
+    <td>{{if .Attached}}<span class="pill finalized">kopplad</span>{{else}}<span class="pill draft">okopplad</span>{{end}}</td>
+    <td class="num">
+      {{if not .Attached}}
+        <a class="btn small" href="/supplier-invoices/new?doc={{.ID}}">Bokför som kostnad</a>
+        <form method="post" action="/kvitton/{{.ID}}/delete" style="display:inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="btn small danger" type="submit">Ta bort</button></form>
+      {{end}}
+    </td>
+  </tr>{{end}}
+</table>
+{{else}}<div class="empty">Inga underlag än. Ladda upp ditt första kvitto ovan.</div>{{end}}
+{{end}}

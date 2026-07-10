@@ -2,8 +2,9 @@
 {{$d := .Data}}
 <h1>Ny leverantörsfaktura</h1>
 {{if $d.Suppliers}}
-<form method="post" action="/supplier-invoices">
+<form method="post" action="/supplier-invoices" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{if $d.DocID}}<input type="hidden" name="doc_id" value="{{$d.DocID}}"><div class="alert ok">Ett uppladdat kvitto kopplas som underlag till den här fakturan.</div>{{end}}
   <div class="row">
     <div><label>Leverantör</label><select name="counterparty" required>{{range $d.Suppliers}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
     <div><label>Fakturanummer (leverantörens)</label><input name="supplier_number" placeholder="INV-42"></div>
@@ -28,6 +29,7 @@
   <label>Kostnadskonto <span class="muted">(används ej vid omvänd moms, då bokförs på 4531/4535)</span></label>
   <select name="account">{{range $d.CostAccounts}}<option value="{{.Number}}">{{.Number}} {{.Name}}</option>{{end}}</select>
   <label>Beskrivning</label><input name="description" placeholder="t.ex. API mars">
+  <label>Kvitto/underlag <span class="muted">(valfritt, krypteras)</span></label><input type="file" name="file" accept="application/pdf,image/*">
   <div style="margin-top:16px"><button class="btn" type="submit">Skapa utkast</button> <a class="btn secondary" href="/supplier-invoices">Avbryt</a></div>
 </form>
 {{else}}
