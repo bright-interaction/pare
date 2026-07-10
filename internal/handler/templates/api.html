@@ -18,15 +18,24 @@
 <div class="alert error">MCP är inte aktiverat (kräver PARE_SHIELD_KEY och PARE_MCP_KEY).</div>
 {{end}}
 
-<h2>Integrationer</h2>
+<h2>Integrationer (aktiva)</h2>
 <table>
-  <tr><th>Integration</th><th>Vad</th></tr>
-  <tr><td>SIE 4 (Fortnox/Visma/revisor)</td><td>Importera hela böcker eller ingående balans, exportera en giltig SIE-fil för revisorn. Under Rapporter.</td></tr>
-  <tr><td>PDF (Gotenberg)</td><td>Fakturor renderas till PDF för utskrift och e-post.</td></tr>
-  <tr><td>E-post (SMTP)</td><td>Skicka fakturor och betalningspåminnelser (kräver PARE_SMTP_*).</td></tr>
-  <tr><td>Felrapportering (Flare)</td><td>Fel och krascher rapporteras till husets Flare-instans (kräver FLARE_DSN).</td></tr>
-  <tr><td>Kvitton och underlag</td><td>Ladda upp kvitton/underlag som krypteras vid uppladdning. Filerna lämnar aldrig Pare och skickas aldrig till AI-assistenten.</td></tr>
-  <tr><td>MCP (Claude)</td><td>AI-assistenten sköter bokföringen via API:t ovan.</td></tr>
+  <tr><th>Integration</th><th>Status</th><th>Vad</th></tr>
+  <tr><td>SIE 4 (Fortnox/Visma/revisor)</td><td><span class="pill finalized">aktiv</span></td><td>Importera hela böcker eller ingående balans, exportera en giltig SIE-fil. Under Rapporter.</td></tr>
+  <tr><td>Bankavstämning (camt.053/CSV)</td><td><span class="pill finalized">aktiv</span></td><td>Importera kontoutdrag, matcha inbetalningar mot fakturor, bokför automatiskt. Under Bank.</td></tr>
+  <tr><td>Kvitton och underlag</td><td><span class="pill finalized">aktiv</span></td><td>Krypterade underlag som aldrig lämnar Pare eller når AI-assistenten.</td></tr>
+  <tr><td>PDF (Gotenberg)</td><td><span class="pill finalized">aktiv</span></td><td>Fakturor renderas till PDF.</td></tr>
+  <tr><td>MCP (Claude)</td><td>{{if $d.Enabled}}<span class="pill finalized">aktiv</span>{{else}}<span class="pill draft">av</span>{{end}}</td><td>AI-assistenten sköter bokföringen via API:t ovan.</td></tr>
+  <tr><td>E-post (SMTP)</td><td>{{if $d.EmailOn}}<span class="pill finalized">aktiv</span>{{else}}<span class="pill draft">kräver PARE_SMTP_*</span>{{end}}</td><td>Skicka fakturor och påminnelser.</td></tr>
+  <tr><td>Felrapportering (Flare)</td><td>{{if $d.FlareOn}}<span class="pill finalized">aktiv</span>{{else}}<span class="pill draft">kräver FLARE_DSN</span>{{end}}</td><td>Fel och krascher till husets Flare.</td></tr>
 </table>
-<p class="muted" style="margin-top:10px;max-width:680px">Dataskydd: alla integrationer bevarar Pares skydd. Identiteter och underlag krypteras i vila, tokeniseras vid AI-gränssnittet, och API-nycklar för externa tjänster förvaras i valvet, aldrig i klartext i databasen.</p>
+
+<h2>Integrationer (nästa steg, kräver konto/nycklar)</h2>
+<table>
+  <tr><th>Integration</th><th>Vad krävs</th></tr>
+  <tr><td>Bankkoppling (PSD2/open banking)</td><td>Live-flöde av banktransaktioner in i avstämningen. EU-suverän leverantör (Enable Banking / Nordigen) + bankkonto kopplat.</td></tr>
+  <tr><td>Betalväxel (Mollie/Swish)</td><td>Betala fakturan online; avgift + clearing bokförs korrekt (omvänd moms på avgiften). EU-först: Mollie/Swish före Stripe.</td></tr>
+  <tr><td>Peppol e-faktura</td><td>Skicka och ta emot strukturerade fakturor (EU-mandatet på väg). Kräver en svensk accesspunkt.</td></tr>
+</table>
+<p class="muted" style="margin-top:10px;max-width:700px">Dataskydd (gäller alla integrationer): identiteter och underlag krypteras i vila, tokeniseras vid AI-gränssnittet, och externa nycklar förvaras i valvet - aldrig i klartext i databasen. Inkommande webhooks verifieras server-side (hämta om från leverantören), fail-closed och idempotent, och skapar utkast för bekräftelse - aldrig blind bokföring.</p>
 {{end}}

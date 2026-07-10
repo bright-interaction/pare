@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -1299,11 +1300,16 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 type apiData struct {
 	Enabled bool
 	Tools   []mcp.ToolDoc
+	EmailOn bool
+	FlareOn bool
 }
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	pd := s.base(r, "API och integrationer")
-	d := apiData{}
+	d := apiData{
+		EmailOn: s.Mailer != nil && s.Mailer.Enabled(),
+		FlareOn: os.Getenv("FLARE_DSN") != "",
+	}
 	if s.MCP != nil {
 		d.Enabled = true
 		d.Tools = s.MCP.ToolDocs()
