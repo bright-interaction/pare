@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/crypto"
+	"github.com/bright-interaction/pare/internal/crypto"
 )
 
 func newShield(t *testing.T) (*Shield, *MemStore) {

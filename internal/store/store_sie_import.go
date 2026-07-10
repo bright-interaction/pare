@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/sie"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/sie"
 )
 
 // SIEImportResult summarizes what an import posted.

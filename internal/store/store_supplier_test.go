@@ -5,8 +5,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
 )
 
 // A foreign-service supplier bill (e.g. Anthropic) self-assesses forvarvsmoms on

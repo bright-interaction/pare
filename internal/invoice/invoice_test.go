@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
 )
 
 func TestSingleLineVerification(t *testing.T) {

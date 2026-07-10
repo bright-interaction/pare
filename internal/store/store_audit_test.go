@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 func sale() []ledger.Line {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
 )
 
 // PgStore is the Postgres-backed token vault.

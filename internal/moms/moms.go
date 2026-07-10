@@ -6,7 +6,7 @@
 // skatteverket.se 2026-07-09. All amounts are int64 öre (ledger.Amount).
 package moms
 
-import "github.com/brightinteraction/pare/internal/ledger"
+import "github.com/bright-interaction/pare/internal/ledger"
 
 // Rate is a Swedish VAT rate in whole percent.
 type Rate int

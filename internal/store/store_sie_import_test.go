@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/sie"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/sie"
 )
 
 const sampleSIE = `#FLAGGA 0

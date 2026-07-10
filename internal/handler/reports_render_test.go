@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
-	"github.com/brightinteraction/pare/internal/store"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/store"
 )
 
 // renderOK executes a page template and fails on a non-200 or any template

@@ -1,4 +1,4 @@
-module github.com/brightinteraction/pare
+module github.com/bright-interaction/pare
 
 go 1.26.3
 

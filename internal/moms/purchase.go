@@ -3,7 +3,7 @@
 
 package moms
 
-import "github.com/brightinteraction/pare/internal/ledger"
+import "github.com/bright-interaction/pare/internal/ledger"
 
 // PurchaseCode is the VAT treatment of a supplier cost line.
 type PurchaseCode string

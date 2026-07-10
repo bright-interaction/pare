@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/ledger"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 // ErrNotFinalized is returned when recording a payment on a non-finalized invoice.

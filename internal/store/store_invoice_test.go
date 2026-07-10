@@ -7,11 +7,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/invoice"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
-	"github.com/brightinteraction/pare/internal/render"
-	"github.com/brightinteraction/pare/internal/sie"
+	"github.com/bright-interaction/pare/internal/invoice"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/render"
+	"github.com/bright-interaction/pare/internal/sie"
 )
 
 func TestInvoiceFinalizeAndSIE(t *testing.T) {

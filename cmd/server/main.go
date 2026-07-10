@@ -14,17 +14,17 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/brightinteraction/pare/internal/auth"
-	"github.com/brightinteraction/pare/internal/config"
-	"github.com/brightinteraction/pare/internal/crypto"
-	"github.com/brightinteraction/pare/internal/db"
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/email"
-	"github.com/brightinteraction/pare/internal/flarereport"
-	"github.com/brightinteraction/pare/internal/handler"
-	"github.com/brightinteraction/pare/internal/mcp"
-	"github.com/brightinteraction/pare/internal/render"
-	"github.com/brightinteraction/pare/internal/store"
+	"github.com/bright-interaction/pare/internal/auth"
+	"github.com/bright-interaction/pare/internal/config"
+	"github.com/bright-interaction/pare/internal/crypto"
+	"github.com/bright-interaction/pare/internal/db"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/email"
+	"github.com/bright-interaction/pare/internal/flarereport"
+	"github.com/bright-interaction/pare/internal/handler"
+	"github.com/bright-interaction/pare/internal/mcp"
+	"github.com/bright-interaction/pare/internal/render"
+	"github.com/bright-interaction/pare/internal/store"
 )
 
 func main() {

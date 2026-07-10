@@ -4,7 +4,7 @@ package moms
 import (
 	"testing"
 
-	"github.com/brightinteraction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/ledger"
 )
 
 func TestVATExact(t *testing.T) {

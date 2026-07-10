@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
 )
 
 // ErrDocumentAttached is returned when deleting a document still linked to a

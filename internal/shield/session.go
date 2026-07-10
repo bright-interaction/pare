@@ -7,7 +7,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/brightinteraction/pare/internal/crypto"
+	"github.com/bright-interaction/pare/internal/crypto"
 )
 
 // Store persists token ciphertext per session.

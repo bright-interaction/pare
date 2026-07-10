@@ -12,12 +12,12 @@ import (
 
 	"github.com/google/uuid"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
-	"github.com/brightinteraction/pare/internal/invoice"
-	"github.com/brightinteraction/pare/internal/ledger"
-	"github.com/brightinteraction/pare/internal/moms"
-	"github.com/brightinteraction/pare/internal/render"
-	"github.com/brightinteraction/pare/internal/sie"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
+	"github.com/bright-interaction/pare/internal/invoice"
+	"github.com/bright-interaction/pare/internal/ledger"
+	"github.com/bright-interaction/pare/internal/moms"
+	"github.com/bright-interaction/pare/internal/render"
+	"github.com/bright-interaction/pare/internal/sie"
 )
 
 // ErrNotDraft is returned when finalizing an invoice that is not a draft.

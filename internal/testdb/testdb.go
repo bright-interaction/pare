@@ -16,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/brightinteraction/pare/internal/db"
+	"github.com/bright-interaction/pare/internal/db"
 )
 
 // New creates (if needed) and migrates a database named pare_<suffix> off the

@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	gen "github.com/brightinteraction/pare/internal/db/generated"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
 )
 
 // erasureTombstone is what a GDPR-erased counterparty's name decrypts to. It is

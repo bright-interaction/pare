@@ -13,12 +13,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 
-	"github.com/brightinteraction/pare/internal/auth"
-	"github.com/brightinteraction/pare/internal/email"
-	"github.com/brightinteraction/pare/internal/flarereport"
-	"github.com/brightinteraction/pare/internal/mcp"
-	renderpkg "github.com/brightinteraction/pare/internal/render"
-	"github.com/brightinteraction/pare/internal/store"
+	"github.com/bright-interaction/pare/internal/auth"
+	"github.com/bright-interaction/pare/internal/email"
+	"github.com/bright-interaction/pare/internal/flarereport"
+	"github.com/bright-interaction/pare/internal/mcp"
+	renderpkg "github.com/bright-interaction/pare/internal/render"
+	"github.com/bright-interaction/pare/internal/store"
 )
 
 // Server holds the wired dependencies for the router.
