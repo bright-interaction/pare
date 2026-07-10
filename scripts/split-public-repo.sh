@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Produce the public AGPL-3.0 mirror of Pare at github.com/bright-interaction/pare,
+# Produce the public fair-code mirror of Pare at github.com/bright-interaction/pare,
 # so `go install github.com/bright-interaction/pare/cmd/server@latest` resolves.
 #
-# Pare is open core: the whole pare/ tree ships in the mirror under AGPL-3.0. The
+# Pare is open core: the whole pare/ tree ships in the mirror under the Pare
+# Sustainable Use License (fair-code: self-host free, no reselling as a service). The
 # commercial pro overlay (multi-company, PSD2 bank feeds, Peppol, payroll, hosted
 # SaaS) lives OUTSIDE this repo behind the `pro` build tag, so there is no pro code
 # to strip here (see LICENSING.md). This script strips only the estate deploy

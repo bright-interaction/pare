@@ -7,7 +7,7 @@ module from a repo whose path matches the module path, so a public release is:
 then tag a version.**
 
 Pare is open core (see [../LICENSING.md](../LICENSING.md)): the mirror carries the
-whole `pare/` tree under AGPL-3.0. The commercial pro overlay (multi-company, PSD2
+whole `pare/` tree under the Pare Sustainable Use License. The commercial pro overlay (multi-company, PSD2
 bank feeds, Peppol, payroll, hosted SaaS) lives outside this repo behind the `pro`
 build tag, so nothing is stripped for licensing. The split script strips only the
 estate deploy compose and redacts internal infra hostnames from history
@@ -25,7 +25,7 @@ and `gitleaks` on PATH.
 2. Create the public repo (outward):
    ```
    gh repo create bright-interaction/pare --public \
-     --description "Lean, sovereign Swedish bookkeeping + invoicing with an AI (MCP) that never sees your counterparties. AGPL-3.0."
+     --description "Lean, sovereign Swedish bookkeeping + invoicing with an AI (MCP) that never sees your counterparties. Fair-code."
    ```
 3. Mirror and push:
    ```
