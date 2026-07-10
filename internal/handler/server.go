@@ -94,6 +94,10 @@ func (s *Server) Routes() http.Handler {
 				r.Get("/invoices/{id}/pay", s.handlePayForm)
 				r.Post("/invoices/{id}/pay", s.handlePay)
 				r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
+				r.Get("/kvitton", s.handleReceipts)
+				r.Post("/kvitton", s.handleReceiptUpload)
+				r.Get("/kvitton/{id}/file", s.handleReceiptFile)
+				r.Post("/kvitton/{id}/delete", s.handleReceiptDelete)
 				r.Get("/supplier-invoices", s.handleSupplierInvoices)
 				r.Get("/supplier-invoices/new", s.handleSupplierInvoiceNew)
 				r.Post("/supplier-invoices", s.handleSupplierInvoiceCreate)
@@ -147,8 +151,11 @@ func securityHeaders(next http.Handler) http.Handler {
 func maxBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limit := int64(1 << 20)
-		if r.URL.Path == "/sie/import" {
-			limit = 16 << 20 // a full year's SIE file upload
+		switch {
+		case r.URL.Path == "/sie/import": // a full year's SIE file
+			limit = 16 << 20
+		case r.URL.Path == "/kvitton" || r.URL.Path == "/supplier-invoices": // receipt uploads
+			limit = 16 << 20
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)

@@ -104,6 +104,33 @@ func (d *DEK) DecryptField(ciphertext string) ([]byte, error) {
 	return open(d.key, ciphertext)
 }
 
+// EncryptBytes returns raw nonce||ciphertext for a binary blob (e.g. a receipt
+// PDF), for BYTEA storage without the base64 overhead of EncryptField.
+func (d *DEK) EncryptBytes(plaintext []byte) ([]byte, error) {
+	gcm, err := newGCM(d.key)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+// DecryptBytes reverses EncryptBytes.
+func (d *DEK) DecryptBytes(raw []byte) ([]byte, error) {
+	gcm, err := newGCM(d.key)
+	if err != nil {
+		return nil, err
+	}
+	ns := gcm.NonceSize()
+	if len(raw) < ns {
+		return nil, ErrCiphertext
+	}
+	return gcm.Open(nil, raw[:ns], raw[ns:], nil)
+}
+
 func seal(key, plaintext []byte) (string, error) {
 	gcm, err := newGCM(key)
 	if err != nil {

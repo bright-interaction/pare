@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -765,6 +766,96 @@ func (s *Server) handlePay(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- receipts / documents (verifikationsunderlag) ---
+
+func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
+	docs, err := s.Store.ListDocuments(r.Context(), companyID(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	pd := s.base(r, "Kvitton")
+	switch r.URL.Query().Get("msg") {
+	case "uploaded":
+		pd.Flash = "Underlaget laddades upp och krypterades."
+	case "deleted":
+		pd.Flash = "Underlaget togs bort."
+	case "attached":
+		pd.Error = "Underlaget är kopplat till en bokförd post och kan inte tas bort."
+	}
+	pd.Data = docs
+	render(w, "kvitton", pd, http.StatusOK)
+}
+
+// saveUploadedReceipt reads the "file" part (if any) and stores it encrypted,
+// returning the new document id (uuid.Nil if no file was uploaded).
+func (s *Server) saveUploadedReceipt(r *http.Request, co uuid.UUID) (uuid.UUID, error) {
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		return uuid.Nil, nil // no file part; not an error
+	}
+	defer f.Close()
+	content, err := io.ReadAll(f)
+	if err != nil || len(content) == 0 {
+		return uuid.Nil, err
+	}
+	mime := hdr.Header.Get("Content-Type")
+	return s.Store.SaveDocument(r.Context(), co, hdr.Filename, mime, content, strings.TrimSpace(r.PostFormValue("note")))
+}
+
+func (s *Server) handleReceiptUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		http.Redirect(w, r, "/kvitton", http.StatusSeeOther)
+		return
+	}
+	id, err := s.saveUploadedReceipt(r, companyID(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if id == uuid.Nil {
+		http.Redirect(w, r, "/kvitton", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/kvitton?msg=uploaded", http.StatusSeeOther)
+}
+
+func (s *Server) handleReceiptFile(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	doc, err := s.Store.GetDocumentContent(r.Context(), companyID(r), id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	mime := doc.Mime
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "inline; filename="+strconv.Quote(doc.Filename))
+	_, _ = w.Write(doc.Content)
+}
+
+func (s *Server) handleReceiptDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	switch err := s.Store.DeleteDocument(r.Context(), companyID(r), id); {
+	case err == nil:
+		http.Redirect(w, r, "/kvitton?msg=deleted", http.StatusSeeOther)
+	case errors.Is(err, store.ErrDocumentAttached):
+		http.Redirect(w, r, "/kvitton?msg=attached", http.StatusSeeOther)
+	default:
+		s.fail(w, err)
+	}
+}
+
 // --- supplier invoices (accounts payable) ---
 
 func (s *Server) handleSupplierInvoices(w http.ResponseWriter, r *http.Request) {
@@ -781,6 +872,7 @@ func (s *Server) handleSupplierInvoices(w http.ResponseWriter, r *http.Request) 
 type supplierNewData struct {
 	Suppliers    []store.Counterparty
 	CostAccounts []ledger.Account
+	DocID        string // an inbox receipt to attach on create (from ?doc=)
 }
 
 func (s *Server) handleSupplierInvoiceNew(w http.ResponseWriter, r *http.Request) {
@@ -800,12 +892,13 @@ func (s *Server) handleSupplierInvoiceNew(w http.ResponseWriter, r *http.Request
 		}
 	}
 	pd := s.base(r, "Ny leverantörsfaktura")
-	pd.Data = supplierNewData{Suppliers: sups, CostAccounts: costs}
+	pd.Data = supplierNewData{Suppliers: sups, CostAccounts: costs, DocID: r.URL.Query().Get("doc")}
 	render(w, "supplier_invoice_new", pd, http.StatusOK)
 }
 
 func (s *Server) handleSupplierInvoiceCreate(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
+	_ = r.ParseMultipartForm(16 << 20) // populates PostForm; also parses an uploaded receipt
+	co := companyID(r)
 	cpID, err := uuid.Parse(r.PostFormValue("counterparty"))
 	if err != nil {
 		http.Redirect(w, r, "/supplier-invoices/new", http.StatusSeeOther)
@@ -815,12 +908,21 @@ func (s *Server) handleSupplierInvoiceCreate(w http.ResponseWriter, r *http.Requ
 	due := formDateOr(r.PostFormValue("due"), date.AddDate(0, 0, 30))
 	code := moms.PurchaseCode(r.PostFormValue("vat"))
 	net := parseKrOre(r.PostFormValue("net"))
-	if _, err := s.Store.CreateSupplierInvoice(r.Context(), companyID(r), cpID,
+	invID, err := s.Store.CreateSupplierInvoice(r.Context(), co, cpID,
 		strings.TrimSpace(r.PostFormValue("supplier_number")), date, due,
 		strings.TrimSpace(r.PostFormValue("account")), net, code,
-		strings.TrimSpace(r.PostFormValue("description"))); err != nil {
+		strings.TrimSpace(r.PostFormValue("description")))
+	if err != nil {
 		s.fail(w, err)
 		return
+	}
+	// Attach an existing inbox receipt (?doc=) and/or a freshly uploaded one, as
+	// verifikationsunderlag. Both stay encrypted; failures don't block the invoice.
+	if docID, e := uuid.Parse(r.PostFormValue("doc_id")); e == nil {
+		_ = s.Store.AttachDocumentToSupplier(r.Context(), co, docID, invID)
+	}
+	if newDoc, _ := s.saveUploadedReceipt(r, co); newDoc != uuid.Nil {
+		_ = s.Store.AttachDocumentToSupplier(r.Context(), co, newDoc, invID)
 	}
 	http.Redirect(w, r, "/supplier-invoices", http.StatusSeeOther)
 }
