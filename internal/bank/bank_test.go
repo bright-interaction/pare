@@ -69,3 +69,18 @@ func TestParseAmountOre(t *testing.T) {
 		}
 	}
 }
+
+// TestParseAmountOreOverflow: an absurd (>17-digit) amount must be rejected with
+// ok=false rather than silently wrapping int64 to a wrong / sign-flipped figure
+// that would be imported as a real bank transaction.
+func TestParseAmountOreOverflow(t *testing.T) {
+	for _, in := range []string{
+		"184467440737095516",      // 18 digits: *100 overflows int64
+		"9223372036854775808",     // MaxInt64+1
+		"99999999999999999999,99", // 20 digits: overflows during accumulation
+	} {
+		if got, ok := parseAmountOre(in); ok {
+			t.Errorf("parseAmountOre(%q) = %d ok=true, want ok=false (overflow)", in, got)
+		}
+	}
+}

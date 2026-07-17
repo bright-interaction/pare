@@ -130,12 +130,34 @@ func (s *Store) BookBankTxnToInvoice(ctx context.Context, companyID, txnID, invo
 	if txn.Status != "unmatched" || txn.AmountOre <= 0 {
 		return ErrTxnNotOpen
 	}
-	verID, err := s.RecordPayment(ctx, companyID, invoiceID, txn.TxnDate.Time, txn.BankAccount, ledger.Amount(txn.AmountOre))
+	// Claim the txn (unmatched -> booking) BEFORE recording the payment. RecordPayment
+	// commits in its own transaction, so without this claim two concurrent bookings of
+	// the same credit (double-click, or MCP pare_match_payment racing the web UI) both
+	// pass the unmatched check and both post a payment, double-booking the bank line.
+	// The claim UPDATE serializes on the row: exactly one caller wins, the loser gets
+	// 0 rows and stops before any payment is posted.
+	claimed, err := s.q.ClaimBankTxn(ctx, gen.ClaimBankTxnParams{ID: txnID, CompanyID: companyID})
 	if err != nil {
 		return err
 	}
-	_, err = s.q.MarkBankTxnBooked(ctx, gen.MarkBankTxnBookedParams{ID: txnID, CompanyID: companyID, VerificationID: pgUUID(verID), MatchedInvoiceID: pgUUID(invoiceID)})
-	return err
+	if claimed == 0 {
+		return ErrTxnNotOpen
+	}
+	verID, err := s.RecordPayment(ctx, companyID, invoiceID, txn.TxnDate.Time, txn.BankAccount, ledger.Amount(txn.AmountOre))
+	if err != nil {
+		// Nothing was posted (RecordPayment is atomic); release the claim so the
+		// operator can retry (e.g. against a different invoice).
+		_, _ = s.q.UnclaimBankTxn(ctx, gen.UnclaimBankTxnParams{ID: txnID, CompanyID: companyID})
+		return err
+	}
+	n, err := s.q.MarkBankTxnBooked(ctx, gen.MarkBankTxnBookedParams{ID: txnID, CompanyID: companyID, VerificationID: pgUUID(verID), MatchedInvoiceID: pgUUID(invoiceID)})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrTxnNotOpen
+	}
+	return nil
 }
 
 // BookBankTxnToAccount books a transaction against a chosen account (money in ->
@@ -175,7 +197,12 @@ func (s *Store) BookBankTxnToAccount(ctx context.Context, companyID, txnID uuid.
 		if n == 0 {
 			return ErrTxnNotOpen
 		}
-		return nil
+		// Record the actor in the HMAC audit chain, in the same tx as the voucher.
+		// Every other ledger-mutating path does this (PostVerification, RecordPayment,
+		// finalize_invoice, CloseFiscalYear); this bank-to-account path was the only
+		// core-postVerification caller that skipped it, so a whole category of
+		// reconciled cost/receipt postings had no actor trail.
+		return s.logAudit(ctx, qtx, companyID, "book_bank_account", "verification", id.String(), account+" "+amt.String())
 	})
 	return err
 }

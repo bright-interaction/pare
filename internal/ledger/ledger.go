@@ -20,6 +20,8 @@ var (
 	ErrNoAccount = errors.New("ledger: line has no account")
 	// ErrNegative means an amount is negative.
 	ErrNegative = errors.New("ledger: amounts must be non-negative")
+	// ErrOverflow means a debit/credit total overflowed int64 öre.
+	ErrOverflow = errors.New("ledger: verification total overflows")
 )
 
 // Line is one posting row: a debit or a credit against a BAS account.
@@ -75,6 +77,14 @@ func (v Verification) Validate() error {
 		}
 		d += l.Debit
 		c += l.Credit
+		// Every line amount is already validated non-negative above, so a running
+		// total that has gone negative can only be int64 overflow. Reject it here,
+		// the shared choke point every posting passes through, so a crafted pair of
+		// near-MaxInt64 lines cannot wrap to a small/negative total that slips the
+		// balance check and the MCP write ceiling.
+		if d < 0 || c < 0 {
+			return ErrOverflow
+		}
 	}
 	if d != c {
 		return ErrUnbalanced
