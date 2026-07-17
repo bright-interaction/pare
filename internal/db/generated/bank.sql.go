@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimBankTxn = `-- name: ClaimBankTxn :execrows
+UPDATE bank_transactions SET status = 'booking'
+WHERE id = $1 AND company_id = $2 AND status = 'unmatched'
+`
+
+type ClaimBankTxnParams struct {
+	ID        uuid.UUID `json:"id"`
+	CompanyID uuid.UUID `json:"company_id"`
+}
+
+// Atomically move an unmatched txn to the transient 'booking' state so a
+// concurrent book (double-click / MCP racing the web UI) cannot also settle the
+// same bank credit. Exactly one caller wins; the loser gets 0 rows.
+func (q *Queries) ClaimBankTxn(ctx context.Context, arg ClaimBankTxnParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimBankTxn, arg.ID, arg.CompanyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getBankTxn = `-- name: GetBankTxn :one
 SELECT id, company_id, txn_date, amount_ore, text_enc, ref, bank_account, fingerprint, status, matched_invoice_id, verification_id, created_at FROM bank_transactions WHERE id = $1
 `
@@ -105,7 +126,7 @@ func (q *Queries) ListBankTxns(ctx context.Context, companyID uuid.UUID) ([]Bank
 const markBankTxnBooked = `-- name: MarkBankTxnBooked :execrows
 UPDATE bank_transactions
 SET status = 'booked', verification_id = $3, matched_invoice_id = $4
-WHERE id = $1 AND company_id = $2 AND status = 'unmatched'
+WHERE id = $1 AND company_id = $2 AND status IN ('unmatched', 'booking')
 `
 
 type MarkBankTxnBookedParams struct {
@@ -140,6 +161,26 @@ type MarkBankTxnIgnoredParams struct {
 
 func (q *Queries) MarkBankTxnIgnored(ctx context.Context, arg MarkBankTxnIgnoredParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markBankTxnIgnored, arg.ID, arg.CompanyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const unclaimBankTxn = `-- name: UnclaimBankTxn :execrows
+UPDATE bank_transactions SET status = 'unmatched'
+WHERE id = $1 AND company_id = $2 AND status = 'booking'
+`
+
+type UnclaimBankTxnParams struct {
+	ID        uuid.UUID `json:"id"`
+	CompanyID uuid.UUID `json:"company_id"`
+}
+
+// Release a claim back to 'unmatched' when booking fails before it commits (e.g.
+// wrong invoice), so the operator can retry.
+func (q *Queries) UnclaimBankTxn(ctx context.Context, arg UnclaimBankTxnParams) (int64, error) {
+	result, err := q.db.Exec(ctx, unclaimBankTxn, arg.ID, arg.CompanyID)
 	if err != nil {
 		return 0, err
 	}

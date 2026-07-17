@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,12 @@ import (
 	"github.com/bright-interaction/pare/internal/ledger"
 	"github.com/bright-interaction/pare/internal/sie"
 )
+
+// ErrLedgerNotEmpty is returned when a SIE import targets a company that already
+// has bookkeeping. Import is an onboarding operation for an empty company;
+// re-running it would post a second full copy of every voucher and double the
+// books, so it is refused rather than silently duplicated.
+var ErrLedgerNotEmpty = errors.New("store: SIE import requires an empty company; the ledger already has verifikat")
 
 // SIEImportResult summarizes what an import posted.
 type SIEImportResult struct {
@@ -31,6 +38,16 @@ type SIEImportResult struct {
 func (s *Store) ImportSIE(ctx context.Context, companyID uuid.UUID, exp sie.Export) (SIEImportResult, error) {
 	var res SIEImportResult
 	err := s.inTx(ctx, func(qtx *gen.Queries) error {
+		// Refuse re-import: this is an empty-company onboarding operation, and a
+		// second run would post a full duplicate set of vouchers (fresh series
+		// numbers, no dedup), silently doubling revenue/costs/VAT. The whole import
+		// is one tx, so aborting here writes nothing.
+		if n, err := qtx.CountVerifications(ctx, companyID); err != nil {
+			return err
+		} else if n > 0 {
+			return ErrLedgerNotEmpty
+		}
+
 		// 1. Seed the file's chart so every referenced account exists.
 		for _, a := range exp.Accounts {
 			if err := qtx.UpsertAccount(ctx, gen.UpsertAccountParams{

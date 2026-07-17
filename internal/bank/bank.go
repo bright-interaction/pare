@@ -8,6 +8,7 @@
 package bank
 
 import (
+	"math"
 	"strings"
 	"time"
 )
@@ -63,7 +64,15 @@ func parseAmountOre(s string) (int64, bool) {
 	whole, frac, _ := strings.Cut(s, dec)
 	var ore int64
 	for _, r := range whole {
+		// Reject an absurd (>17-digit) amount before it silently wraps int64 to a
+		// wrong, possibly sign-flipped figure that would be stored as a real txn.
+		if ore > (math.MaxInt64-9)/10 {
+			return 0, false
+		}
 		ore = ore*10 + int64(r-'0')
+	}
+	if ore > math.MaxInt64/100 {
+		return 0, false
 	}
 	ore *= 100
 	frac = (frac + "00")[:2]

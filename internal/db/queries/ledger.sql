@@ -40,6 +40,9 @@ VALUES ($1, $2, $3, $4, $5);
 -- name: ListVerifications :many
 SELECT * FROM verifications WHERE company_id = $1 ORDER BY vdate, series, number;
 
+-- name: CountVerifications :one
+SELECT count(*) FROM verifications WHERE company_id = $1;
+
 -- name: ListLinesForCompany :many
 SELECT l.verification_id, l.account, l.debit_ore, l.credit_ore, l.vat_code
 FROM verification_lines l

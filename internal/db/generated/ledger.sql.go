@@ -29,6 +29,17 @@ func (q *Queries) CountRetainedInvoices(ctx context.Context, arg CountRetainedIn
 	return count, err
 }
 
+const countVerifications = `-- name: CountVerifications :one
+SELECT count(*) FROM verifications WHERE company_id = $1
+`
+
+func (q *Queries) CountVerifications(ctx context.Context, companyID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countVerifications, companyID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const eraseCounterparty = `-- name: EraseCounterparty :exec
 UPDATE counterparties
 SET name_enc = $3, orgnr_enc = '', personnummer_enc = '', address_enc = '', iban_enc = '', email_enc = '',

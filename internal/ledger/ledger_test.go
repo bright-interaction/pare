@@ -35,6 +35,26 @@ func cost() Verification {
 	}
 }
 
+// TestValidateRejectsOverflow: two near-MaxInt64 debit lines balanced by two
+// matching credit lines all wrap identically, so the totals stay equal and the
+// per-line non-negative checks pass. Validate must still reject this as overflow
+// so it cannot slip the MCP write ceiling and post an absurd verifikat.
+func TestValidateRejectsOverflow(t *testing.T) {
+	huge := Amount(5_000_000_000_000_000_000) // 5e18; two sum to 1e19 > MaxInt64
+	v := Verification{
+		Series: "A", Number: 1, Date: day("2026-01-15"), Description: "overflow",
+		Lines: []Line{
+			{Account: "1930", Debit: huge},
+			{Account: "1930", Debit: huge},
+			{Account: "3000", Credit: huge},
+			{Account: "3000", Credit: huge},
+		},
+	}
+	if err := v.Validate(); err != ErrOverflow {
+		t.Fatalf("expected ErrOverflow, got %v", err)
+	}
+}
+
 func TestValidateBalanced(t *testing.T) {
 	for _, v := range []Verification{sale(), cost()} {
 		if err := v.Validate(); err != nil {

@@ -834,13 +834,33 @@ func (s *Server) handleReceiptFile(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	mime := doc.Mime
-	if mime == "" {
-		mime = "application/octet-stream"
+	// Do not trust the client-supplied Content-Type stored at upload. Sniff the
+	// actual bytes and only serve a known-safe type inline; anything else is sent
+	// as an attachment with a neutral type, so a .html/.svg blob uploaded under a
+	// forged image type cannot be rendered inline from the app origin.
+	detected := http.DetectContentType(doc.Content)
+	disposition := "attachment"
+	serveType := "application/octet-stream"
+	if inlineSafeReceiptType(detected) {
+		disposition = "inline"
+		serveType = detected
 	}
-	w.Header().Set("Content-Type", mime)
-	w.Header().Set("Content-Disposition", "inline; filename="+strconv.Quote(doc.Filename))
+	w.Header().Set("Content-Type", serveType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", disposition+"; filename="+strconv.Quote(doc.Filename))
 	_, _ = w.Write(doc.Content)
+}
+
+// inlineSafeReceiptType is the allow-list of receipt content types safe to render
+// inline (no active content). http.DetectContentType appends "; charset=..." for
+// text, so match on the prefix.
+func inlineSafeReceiptType(detected string) bool {
+	for _, t := range []string{"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"} {
+		if strings.HasPrefix(detected, t) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleReceiptDelete(w http.ResponseWriter, r *http.Request) {
@@ -1401,7 +1421,11 @@ func (s *Server) handleSIEImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("sie import", "err", err)
 		pd := s.base(r, "Importera SIE")
-		pd.Error = "Importen avbröts: en verifikation balanserar inte eller ett konto saknas. Inget bokfördes."
+		if errors.Is(err, store.ErrLedgerNotEmpty) {
+			pd.Error = "Importen avbröts: företaget har redan bokföring. SIE-import är endast för ett tomt företag."
+		} else {
+			pd.Error = "Importen avbröts: en verifikation balanserar inte eller ett konto saknas. Inget bokfördes."
+		}
 		render(w, "sie_import", pd, http.StatusBadRequest)
 		return
 	}
