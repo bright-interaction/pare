@@ -75,6 +75,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Encrypt any document filename/note still stored in cleartext (rows written
+	// before those columns were encrypted), then blank the cleartext.
+	if n, err := st.BackfillDocumentPII(ctx); err != nil {
+		slog.Error("backfill document pii", "err", err)
+		os.Exit(1)
+	} else if n > 0 {
+		slog.Info("backfilled document pii encryption", "documents", n)
+	}
+
 	// Sweep expired sessions + stale shield tokens hourly (bounds tokenized-value
 	// lifetime, incl. GDPR-erased identities captured in old MCP sessions).
 	st.StartSweeper(ctx, time.Hour)

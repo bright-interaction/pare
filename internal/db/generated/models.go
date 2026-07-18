@@ -90,6 +90,8 @@ type Document struct {
 	SupplierInvoiceID pgtype.UUID        `json:"supplier_invoice_id"`
 	VerificationID    pgtype.UUID        `json:"verification_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	FilenameEnc       string             `json:"filename_enc"`
+	NoteEnc           string             `json:"note_enc"`
 }
 
 type FiscalYear struct {
