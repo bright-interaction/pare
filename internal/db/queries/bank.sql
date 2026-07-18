@@ -30,3 +30,14 @@ WHERE id = $1 AND company_id = $2 AND status IN ('unmatched', 'booking');
 -- name: MarkBankTxnIgnored :execrows
 UPDATE bank_transactions SET status = 'ignored'
 WHERE id = $1 AND company_id = $2 AND status = 'unmatched';
+
+-- name: AnonymizeNonRetainedBankTxns :execrows
+-- Blank the free-text PII (payer name / message, text_enc) of bank lines that
+-- were never booked (unmatched or ignored, no verifikat, no matched invoice) and
+-- are older than the cutoff. These are not räkenskapsinformation, so the identity
+-- need not be retained; the cutoff avoids wiping a line the user might still
+-- reconcile. The row + fingerprint stay so re-import is still idempotent.
+UPDATE bank_transactions SET text_enc = ''
+WHERE company_id = $1 AND status IN ('unmatched', 'ignored')
+  AND verification_id IS NULL AND matched_invoice_id IS NULL
+  AND text_enc <> '' AND created_at < $2;

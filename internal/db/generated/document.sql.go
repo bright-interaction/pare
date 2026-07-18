@@ -12,6 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const anonymizeOrphanDocuments = `-- name: AnonymizeOrphanDocuments :execrows
+UPDATE documents SET filename_enc = '', note_enc = ''
+WHERE company_id = $1 AND supplier_invoice_id IS NULL AND verification_id IS NULL
+  AND (filename_enc <> '' OR note_enc <> '') AND created_at < $2
+`
+
+type AnonymizeOrphanDocumentsParams struct {
+	CompanyID uuid.UUID          `json:"company_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+// Blank the PII metadata (filename + note) of documents that are NOT
+// verifikationsunderlag (not attached to a supplier invoice or a verification)
+// and are older than the cutoff. Such an orphan receipt is not räkenskaps-
+// information, so its identifying filename/note need not be retained. Rows are
+// kept for referential integrity.
+func (q *Queries) AnonymizeOrphanDocuments(ctx context.Context, arg AnonymizeOrphanDocumentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, anonymizeOrphanDocuments, arg.CompanyID, arg.CreatedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const attachDocumentToSupplier = `-- name: AttachDocumentToSupplier :execrows
 UPDATE documents SET supplier_invoice_id = $3
 WHERE id = $1 AND company_id = $2
@@ -49,14 +73,14 @@ func (q *Queries) DeleteDocument(ctx context.Context, arg DeleteDocumentParams) 
 }
 
 const getDocumentContent = `-- name: GetDocumentContent :one
-SELECT company_id, filename, mime, content_enc FROM documents WHERE id = $1
+SELECT company_id, filename_enc, mime, content_enc FROM documents WHERE id = $1
 `
 
 type GetDocumentContentRow struct {
-	CompanyID  uuid.UUID `json:"company_id"`
-	Filename   string    `json:"filename"`
-	Mime       string    `json:"mime"`
-	ContentEnc []byte    `json:"content_enc"`
+	CompanyID   uuid.UUID `json:"company_id"`
+	FilenameEnc string    `json:"filename_enc"`
+	Mime        string    `json:"mime"`
+	ContentEnc  []byte    `json:"content_enc"`
 }
 
 func (q *Queries) GetDocumentContent(ctx context.Context, id uuid.UUID) (GetDocumentContentRow, error) {
@@ -64,7 +88,7 @@ func (q *Queries) GetDocumentContent(ctx context.Context, id uuid.UUID) (GetDocu
 	var i GetDocumentContentRow
 	err := row.Scan(
 		&i.CompanyID,
-		&i.Filename,
+		&i.FilenameEnc,
 		&i.Mime,
 		&i.ContentEnc,
 	)
@@ -72,30 +96,32 @@ func (q *Queries) GetDocumentContent(ctx context.Context, id uuid.UUID) (GetDocu
 }
 
 const insertDocument = `-- name: InsertDocument :one
-INSERT INTO documents (company_id, filename, mime, byte_size, content_enc, sha256, note)
+INSERT INTO documents (company_id, mime, byte_size, content_enc, sha256, filename_enc, note_enc)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id
 `
 
 type InsertDocumentParams struct {
-	CompanyID  uuid.UUID `json:"company_id"`
-	Filename   string    `json:"filename"`
-	Mime       string    `json:"mime"`
-	ByteSize   int64     `json:"byte_size"`
-	ContentEnc []byte    `json:"content_enc"`
-	Sha256     string    `json:"sha256"`
-	Note       string    `json:"note"`
+	CompanyID   uuid.UUID `json:"company_id"`
+	Mime        string    `json:"mime"`
+	ByteSize    int64     `json:"byte_size"`
+	ContentEnc  []byte    `json:"content_enc"`
+	Sha256      string    `json:"sha256"`
+	FilenameEnc string    `json:"filename_enc"`
+	NoteEnc     string    `json:"note_enc"`
 }
 
+// filename + note are stored encrypted (filename_enc/note_enc); the legacy
+// cleartext columns default to ” and are no longer written.
 func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, insertDocument,
 		arg.CompanyID,
-		arg.Filename,
 		arg.Mime,
 		arg.ByteSize,
 		arg.ContentEnc,
 		arg.Sha256,
-		arg.Note,
+		arg.FilenameEnc,
+		arg.NoteEnc,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -103,16 +129,16 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 }
 
 const listDocumentMeta = `-- name: ListDocumentMeta :many
-SELECT id, filename, mime, byte_size, note, supplier_invoice_id, created_at
+SELECT id, filename_enc, mime, byte_size, note_enc, supplier_invoice_id, created_at
 FROM documents WHERE company_id = $1 ORDER BY created_at DESC
 `
 
 type ListDocumentMetaRow struct {
 	ID                uuid.UUID          `json:"id"`
-	Filename          string             `json:"filename"`
+	FilenameEnc       string             `json:"filename_enc"`
 	Mime              string             `json:"mime"`
 	ByteSize          int64              `json:"byte_size"`
-	Note              string             `json:"note"`
+	NoteEnc           string             `json:"note_enc"`
 	SupplierInvoiceID pgtype.UUID        `json:"supplier_invoice_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
@@ -129,10 +155,10 @@ func (q *Queries) ListDocumentMeta(ctx context.Context, companyID uuid.UUID) ([]
 		var i ListDocumentMetaRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Filename,
+			&i.FilenameEnc,
 			&i.Mime,
 			&i.ByteSize,
-			&i.Note,
+			&i.NoteEnc,
 			&i.SupplierInvoiceID,
 			&i.CreatedAt,
 		); err != nil {
@@ -146,8 +172,48 @@ func (q *Queries) ListDocumentMeta(ctx context.Context, companyID uuid.UUID) ([]
 	return items, nil
 }
 
+const listDocumentsForPIIBackfill = `-- name: ListDocumentsForPIIBackfill :many
+SELECT id, company_id, filename, note FROM documents
+WHERE filename_enc = '' AND (filename <> '' OR note <> '')
+`
+
+type ListDocumentsForPIIBackfillRow struct {
+	ID        uuid.UUID `json:"id"`
+	CompanyID uuid.UUID `json:"company_id"`
+	Filename  string    `json:"filename"`
+	Note      string    `json:"note"`
+}
+
+// Rows written before filename/note were encrypted: cleartext still present and
+// the encrypted column empty. Returns the cleartext so a per-company DEK can
+// encrypt it, then SetDocumentPIIEnc blanks the cleartext.
+func (q *Queries) ListDocumentsForPIIBackfill(ctx context.Context) ([]ListDocumentsForPIIBackfillRow, error) {
+	rows, err := q.db.Query(ctx, listDocumentsForPIIBackfill)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDocumentsForPIIBackfillRow
+	for rows.Next() {
+		var i ListDocumentsForPIIBackfillRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CompanyID,
+			&i.Filename,
+			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDocumentsForSupplier = `-- name: ListDocumentsForSupplier :many
-SELECT id, filename, mime, byte_size, note, created_at
+SELECT id, filename_enc, mime, byte_size, note_enc, created_at
 FROM documents WHERE company_id = $1 AND supplier_invoice_id = $2 ORDER BY created_at
 `
 
@@ -157,12 +223,12 @@ type ListDocumentsForSupplierParams struct {
 }
 
 type ListDocumentsForSupplierRow struct {
-	ID        uuid.UUID          `json:"id"`
-	Filename  string             `json:"filename"`
-	Mime      string             `json:"mime"`
-	ByteSize  int64              `json:"byte_size"`
-	Note      string             `json:"note"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID          uuid.UUID          `json:"id"`
+	FilenameEnc string             `json:"filename_enc"`
+	Mime        string             `json:"mime"`
+	ByteSize    int64              `json:"byte_size"`
+	NoteEnc     string             `json:"note_enc"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 func (q *Queries) ListDocumentsForSupplier(ctx context.Context, arg ListDocumentsForSupplierParams) ([]ListDocumentsForSupplierRow, error) {
@@ -176,10 +242,10 @@ func (q *Queries) ListDocumentsForSupplier(ctx context.Context, arg ListDocument
 		var i ListDocumentsForSupplierRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Filename,
+			&i.FilenameEnc,
 			&i.Mime,
 			&i.ByteSize,
-			&i.Note,
+			&i.NoteEnc,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -190,4 +256,19 @@ func (q *Queries) ListDocumentsForSupplier(ctx context.Context, arg ListDocument
 		return nil, err
 	}
 	return items, nil
+}
+
+const setDocumentPIIEnc = `-- name: SetDocumentPIIEnc :exec
+UPDATE documents SET filename_enc = $2, note_enc = $3, filename = '', note = '' WHERE id = $1
+`
+
+type SetDocumentPIIEncParams struct {
+	ID          uuid.UUID `json:"id"`
+	FilenameEnc string    `json:"filename_enc"`
+	NoteEnc     string    `json:"note_enc"`
+}
+
+func (q *Queries) SetDocumentPIIEnc(ctx context.Context, arg SetDocumentPIIEncParams) error {
+	_, err := q.db.Exec(ctx, setDocumentPIIEnc, arg.ID, arg.FilenameEnc, arg.NoteEnc)
+	return err
 }

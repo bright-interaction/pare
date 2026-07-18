@@ -12,6 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const anonymizeNonRetainedBankTxns = `-- name: AnonymizeNonRetainedBankTxns :execrows
+UPDATE bank_transactions SET text_enc = ''
+WHERE company_id = $1 AND status IN ('unmatched', 'ignored')
+  AND verification_id IS NULL AND matched_invoice_id IS NULL
+  AND text_enc <> '' AND created_at < $2
+`
+
+type AnonymizeNonRetainedBankTxnsParams struct {
+	CompanyID uuid.UUID          `json:"company_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+// Blank the free-text PII (payer name / message, text_enc) of bank lines that
+// were never booked (unmatched or ignored, no verifikat, no matched invoice) and
+// are older than the cutoff. These are not räkenskapsinformation, so the identity
+// need not be retained; the cutoff avoids wiping a line the user might still
+// reconcile. The row + fingerprint stay so re-import is still idempotent.
+func (q *Queries) AnonymizeNonRetainedBankTxns(ctx context.Context, arg AnonymizeNonRetainedBankTxnsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, anonymizeNonRetainedBankTxns, arg.CompanyID, arg.CreatedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimBankTxn = `-- name: ClaimBankTxn :execrows
 UPDATE bank_transactions SET status = 'booking'
 WHERE id = $1 AND company_id = $2 AND status = 'unmatched'
