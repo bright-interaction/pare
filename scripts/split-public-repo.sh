@@ -47,20 +47,14 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 [ -d "$PREFIX" ] || { echo "error: $PREFIX/ not found at $ROOT" >&2; exit 1; }
 
-# Coarse pre-flight secret guard on the subtree history (defense before the
-# authoritative gitleaks scan on the filtered clone below). The value class
-# excludes '.' so dotted Go selectors / SQL columns break into sub-16-char tokens
-# instead of false-tripping; documented placeholders are filtered out. A real
-# high-entropy credential is a contiguous >=16 run without those markers and still
-# trips the guard; dotted secrets (JWTs) are caught by the gitleaks gate below.
-if git log -p -- "$PREFIX/" \
-  | grep -iE '(api[_-]?key|secret|password|bearer|private[_-]?key)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/_+-]{16,}' \
-  | grep -ivE 'changeme|change[_-]?me|your_|_here|example|redacted|placeholder|xxxx|base64_32_bytes|min_16_char' \
-  | grep -q .; then
-  echo "REFUSING: a possible secret appears in $PREFIX/ history. Audit before any push:" >&2
-  echo "  git log -p -- $PREFIX/ | grep -iE 'key|secret|token|password'" >&2
-  exit 1
-fi
+# Coarse pre-flight secret guard. Shared by every product mirror, in ONE file, so
+# it cannot drift again. It did drift: five copies, five different regexes, one of
+# which could not fire at all. See scripts/mirror-secret-preflight.sh for both bugs.
+# This is the fast pre-check; the gitleaks scan on the filtered clone below is the
+# authoritative gate.
+# shellcheck source=../../scripts/mirror-secret-preflight.sh
+. "$ROOT/scripts/mirror-secret-preflight.sh"
+mirror_secret_preflight "$PREFIX" "$ROOT/$PREFIX/scripts/mirror-secret-allowlist.txt"
 
 echo "Splitting $PREFIX/ subtree (history-preserving) into $SPLIT_BRANCH ..."
 git branch -D "$SPLIT_BRANCH" >/dev/null 2>&1 || true
