@@ -39,6 +39,9 @@ type camtDate struct {
 }
 
 // ParseCAMT parses an ISO 20022 camt.053 bank statement into normalized entries.
+// Amounts go through parseAmountISO, which reads '.' as the decimal point and
+// rejects grouping, per the ISO 20022 decimal-number type. Do not point this at
+// the locale-tolerant CSV parser: the two formats disagree about '.'.
 func ParseCAMT(r io.Reader) ([]Entry, error) {
 	var doc camtDoc
 	if err := xml.NewDecoder(r).Decode(&doc); err != nil {
@@ -46,7 +49,7 @@ func ParseCAMT(r io.Reader) ([]Entry, error) {
 	}
 	out := make([]Entry, 0, len(doc.Entries))
 	for _, e := range doc.Entries {
-		ore, ok := parseAmountOre(e.Amt.Value)
+		ore, ok := parseAmountISO(e.Amt.Value)
 		if !ok {
 			continue
 		}
