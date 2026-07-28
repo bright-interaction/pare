@@ -111,6 +111,10 @@ keys if you want the AI assistant), then `docker compose -f deploy/docker-compos
 and open http://localhost:8080. Migrations run on boot (goose); `SyncChart`
 backfills chart additions.
 
+Upgrading an existing install: read [docs/UPGRADING.md](docs/UPGRADING.md) first.
+It lists the releases that need an operator action, including the 2026-07-28 bank
+CSV amount fix.
+
 ## License
 
 Fair-code under the Pare Sustainable Use License (see [LICENSE](LICENSE) and

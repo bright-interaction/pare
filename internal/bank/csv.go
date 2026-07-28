@@ -11,8 +11,11 @@ import (
 
 // ParseCSV parses a simple bank-export CSV into normalized entries. It detects
 // the delimiter (`;` or `,`), finds the date / amount / text columns from the
-// header (Swedish or English keywords), and tolerates Swedish number formatting.
-// camt.053 is the preferred, universal format; this covers a plain CSV export.
+// header (Swedish or English keywords), and reads amounts in Swedish locale
+// format via parseAmountSwedish (comma decimal, space or dot thousands, so
+// "12.500" is 12 500 kr). camt.053 is the preferred, universal format; this
+// covers a plain CSV export. A row whose amount or date does not parse is
+// skipped, which is also how the header line is discarded.
 func ParseCSV(r io.Reader) ([]Entry, error) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
@@ -54,7 +57,7 @@ func ParseCSV(r io.Reader) ([]Entry, error) {
 		if ai >= len(f) || di >= len(f) {
 			continue
 		}
-		amount, ok := parseAmountOre(f[ai])
+		amount, ok := parseAmountSwedish(f[ai])
 		if !ok {
 			continue
 		}
