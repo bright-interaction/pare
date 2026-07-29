@@ -7,7 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/bright-interaction/pare/internal/bank"
+	gen "github.com/bright-interaction/pare/internal/db/generated"
 	"github.com/bright-interaction/pare/internal/ledger"
 	"github.com/bright-interaction/pare/internal/moms"
 )
@@ -35,12 +39,12 @@ func TestBackfillDocumentPII(t *testing.T) {
 		t.Fatalf("seed legacy row: %v", err)
 	}
 
-	n, err := s.BackfillDocumentPII(ctx)
+	n, skipped, err := s.BackfillDocumentPII(ctx)
 	if err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("backfill migrated %d, want 1", n)
+	if n != 1 || skipped != 0 {
+		t.Fatalf("backfill migrated %d skipped %d, want 1/0", n, skipped)
 	}
 
 	// At rest: cleartext columns blanked, *_enc populated and not cleartext.
@@ -71,8 +75,163 @@ func TestBackfillDocumentPII(t *testing.T) {
 	}
 
 	// Idempotent: a second backfill migrates nothing.
-	if n2, err := s.BackfillDocumentPII(ctx); err != nil || n2 != 0 {
-		t.Fatalf("second backfill not a no-op: n=%d err=%v", n2, err)
+	if n2, sk2, err := s.BackfillDocumentPII(ctx); err != nil || n2 != 0 || sk2 != 0 {
+		t.Fatalf("second backfill not a no-op: n=%d skipped=%d err=%v", n2, sk2, err)
+	}
+}
+
+// TestBackfillDocumentPIIDoesNotGateBootOnUnusableDEK is the end-to-end repro
+// for audit 2026-07-28 HIGH-2 against a real database: a company whose
+// dek_wrapped no longer unwraps (rotated master key, corrupt byte) must not make
+// the startup backfill return an error, because cmd/server/main.go turns that
+// into os.Exit(1) before the listener is built and the selection query re-serves
+// the same rows on every restart, so the server crash-loops forever.
+//
+// It mutates rows only. It never changes the schema of the shared test database.
+func TestBackfillDocumentPIIDoesNotGateBootOnUnusableDEK(t *testing.T) {
+	s, pool := testStore(t)
+	defer pool.Close()
+	ctx := context.Background()
+	co, _ := s.BootstrapCompany(ctx, "Broken AB", "556000-0000")
+
+	id, err := s.SaveDocument(ctx, co, "placeholder.pdf", "application/pdf", []byte("%PDF-1.4 body"), "")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	const oldName = "kvitto_Anna_Andersson_19850101.pdf"
+	if _, err := pool.Exec(ctx,
+		`UPDATE documents SET filename=$2, note='n', filename_enc='', note_enc='' WHERE id=$1`,
+		id, oldName); err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE companies SET dek_wrapped='not-a-valid-wrapped-dek' WHERE id=$1`, co); err != nil {
+		t.Fatalf("corrupt dek: %v", err)
+	}
+
+	migrated, skipped, err := s.BackfillDocumentPII(ctx)
+	if err != nil {
+		t.Fatalf("boot gated on an unusable company DEK: %v", err)
+	}
+	if migrated != 0 || skipped != 1 {
+		t.Fatalf("migrated=%d skipped=%d, want 0/1", migrated, skipped)
+	}
+
+	// The skipped row is left exactly as it was: no half-write that would make a
+	// later repair lose the cleartext it could not encrypt yet.
+	var fnClear, fnEnc string
+	if err := pool.QueryRow(ctx, `SELECT filename, filename_enc FROM documents WHERE id=$1`, id).
+		Scan(&fnClear, &fnEnc); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if fnClear != oldName || fnEnc != "" {
+		t.Fatalf("skipped row was mutated: filename=%q filename_enc=%q", fnClear, fnEnc)
+	}
+
+	// Restarting reports the same thing rather than drifting or crashing.
+	if m2, s2, err := s.BackfillDocumentPII(ctx); err != nil || m2 != 0 || s2 != 1 {
+		t.Fatalf("restart path: migrated=%d skipped=%d err=%v, want 0/1/nil", m2, s2, err)
+	}
+}
+
+// TestAnonymizeOrphanDocumentsHealsLegacyCleartext is the other half of HIGH-2.
+// Because the backfill now skips a broken-DEK company instead of aborting boot,
+// the retention sweep is the only thing that can ever erase that company's
+// non-retained PII, and it must fire on the legacy cleartext columns (it has no
+// DEK to look at filename_enc with).
+func TestAnonymizeOrphanDocumentsHealsLegacyCleartext(t *testing.T) {
+	s, pool := testStore(t)
+	defer pool.Close()
+	ctx := context.Background()
+	co, _ := s.BootstrapCompany(ctx, "Broken AB", "556000-0000")
+
+	orphan, err := s.SaveDocument(ctx, co, "placeholder.pdf", "application/pdf", []byte("%PDF orphan"), "")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE documents SET filename='kvitto_Sven_Svensson.pdf', note='om Sven', filename_enc='', note_enc='' WHERE id=$1`,
+		orphan); err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+
+	docs, err := s.q.AnonymizeOrphanDocuments(ctx, gen.AnonymizeOrphanDocumentsParams{
+		CompanyID: co, CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("anonymize: %v", err)
+	}
+	if docs != 1 {
+		t.Fatalf("anonymized %d orphan documents, want 1", docs)
+	}
+	var fn, note string
+	if err := pool.QueryRow(ctx, `SELECT filename, note FROM documents WHERE id=$1`, orphan).Scan(&fn, &note); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if fn != "" || note != "" {
+		t.Fatalf("legacy cleartext survived the sweep: filename=%q note=%q", fn, note)
+	}
+}
+
+// TestAnonymizeOrphanDocumentsKeepsRetainedCleartext guards the widened
+// predicate against over-reach on BOTH retention legs. A document attached to a
+// supplier invoice and a document attached to a verification are
+// verifikationsunderlag: Bokforingslagen requires the metadata retained, so the
+// sweep must not blank their cleartext even though it now matches on it.
+func TestAnonymizeOrphanDocumentsKeepsRetainedCleartext(t *testing.T) {
+	s, pool := testStore(t)
+	defer pool.Close()
+	ctx := context.Background()
+	co, _ := s.BootstrapCompany(ctx, "BI AB", "556000-0000")
+
+	sup, _ := s.CreateCounterparty(ctx, co, Counterparty{Kind: "supplier", Name: "Anthropic PBC", OrgNr: "US-0"})
+	inv, _ := s.CreateSupplierInvoice(ctx, co, sup, "INV-9", day("2026-03-01"), day("2026-03-31"), "", ledger.SEK(1000, 0), moms.PIMP, "API")
+	ver, err := s.PostVerification(ctx, co, "A", day("2026-03-02"), "kontant", []ledger.Line{
+		{Account: "1930", Credit: ledger.SEK(100, 0)},
+		{Account: "5410", Debit: ledger.SEK(100, 0)},
+	}, uuid.Nil)
+	if err != nil {
+		t.Fatalf("post verification: %v", err)
+	}
+
+	// Two legacy cleartext documents, one on each retention leg.
+	onInvoice, _ := s.SaveDocument(ctx, co, "p1.pdf", "application/pdf", []byte("%PDF a"), "")
+	onVerification, _ := s.SaveDocument(ctx, co, "p2.pdf", "application/pdf", []byte("%PDF b"), "")
+	if _, err := pool.Exec(ctx,
+		`UPDATE documents SET filename='underlag_Anna.pdf', note='underlag', filename_enc='', note_enc='',
+		 supplier_invoice_id=$2 WHERE id=$1`, onInvoice, inv); err != nil {
+		t.Fatalf("seed invoice underlag: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE documents SET filename='underlag_Bo.pdf', note='underlag', filename_enc='', note_enc='',
+		 verification_id=$2 WHERE id=$1`, onVerification, ver); err != nil {
+		t.Fatalf("seed verification underlag: %v", err)
+	}
+
+	docs, err := s.q.AnonymizeOrphanDocuments(ctx, gen.AnonymizeOrphanDocumentsParams{
+		CompanyID: co, CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("anonymize: %v", err)
+	}
+	if docs != 0 {
+		t.Fatalf("sweep touched %d retained documents, want 0", docs)
+	}
+	for _, tc := range []struct {
+		leg  string
+		id   uuid.UUID
+		want string
+	}{
+		{"supplier_invoice_id", onInvoice, "underlag_Anna.pdf"},
+		{"verification_id", onVerification, "underlag_Bo.pdf"},
+	} {
+		var fn string
+		if err := pool.QueryRow(ctx, `SELECT filename FROM documents WHERE id=$1`, tc.id).Scan(&fn); err != nil {
+			t.Fatalf("read %s row: %v", tc.leg, err)
+		}
+		if fn != tc.want {
+			t.Fatalf("%s leg: retained underlag was erased, filename=%q want %q", tc.leg, fn, tc.want)
+		}
 	}
 }
 

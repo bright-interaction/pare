@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -77,11 +78,33 @@ func main() {
 
 	// Encrypt any document filename/note still stored in cleartext (rows written
 	// before those columns were encrypted), then blank the cleartext.
-	if n, err := st.BackfillDocumentPII(ctx); err != nil {
+	//
+	// A company whose DEK is unusable is skipped, not fatal (audit 2026-07-28
+	// HIGH-2: one corrupt dek_wrapped used to crash-loop the whole multi-tenant
+	// server on every restart). Every other backfill failure, including a failed
+	// selection query or a failed write, is still fatal here: those are transient
+	// or structural faults, and booting on them would silently leave PII in
+	// cleartext with the migration reported as done.
+	migrated, skipped, err := st.BackfillDocumentPII(ctx)
+	if err != nil {
 		slog.Error("backfill document pii", "err", err)
+		flarereport.CaptureErr(err)
+		flarereport.Flush() // the deferred Flush above does not run under os.Exit
 		os.Exit(1)
-	} else if n > 0 {
-		slog.Info("backfilled document pii encryption", "documents", n)
+	}
+	if migrated > 0 {
+		slog.Info("backfilled document pii encryption", "documents", migrated)
+	}
+	if skipped > 0 {
+		// Loud on purpose. These rows keep cleartext PII (a receipt filename
+		// routinely carries a name or personnummer), and migration 00025's plan to
+		// drop the cleartext columns is only safe once this count is zero. Error
+		// level plus a Flare issue, matching the handler convention for a
+		// handled-but-should-page condition, so it does not depend on log shipping.
+		slog.Error("backfill document pii incomplete: documents left in cleartext",
+			"documents", skipped)
+		flarereport.CaptureErr(fmt.Errorf(
+			"backfill document pii: %d document(s) left in cleartext, a company DEK is unusable", skipped))
 	}
 
 	// Sweep expired sessions + stale shield tokens hourly (bounds tokenized-value
