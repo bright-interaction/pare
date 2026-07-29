@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -170,47 +171,100 @@ func (s *Store) AttachDocumentToSupplier(ctx context.Context, companyID, docID, 
 // BackfillDocumentPII encrypts filename/note for documents written before those
 // columns were encrypted, then blanks the cleartext (SetDocumentPIIEnc). Each
 // company has its own DEK, so the migration is grouped per company. Idempotent:
-// rows already migrated (filename_enc set) are not returned by the query. Returns
-// the number of documents migrated. Run once at startup.
-func (s *Store) BackfillDocumentPII(ctx context.Context) (int, error) {
+// rows already migrated (filename_enc set) are not returned by the query. Run
+// once at startup.
+//
+// Failure policy, split on purpose (audit 2026-07-28 HIGH-2). A company whose
+// DEK is unusable (ErrDEKUnusable) is skipped and counted in skipped: no retry
+// repairs a corrupt dek_wrapped, and one such company must not stop the server
+// from booting for every other company. EVERYTHING else stays fatal and is
+// returned as err: the selection query, an infrastructure failure loading a
+// company, a field-encryption failure, and a failed SetDocumentPIIEnc write.
+// Those are transient or structural faults where continuing would silently
+// under-migrate PII, so the caller must fail closed on them.
+//
+// Skipped rows keep their legacy cleartext filename/note and are re-attempted on
+// every boot (the selection predicate still matches them). Only SOME of them are
+// reachable by the retention sweep in the meantime: AnonymizeNonRetainedPII
+// blanks cleartext without needing a DEK, but its predicate is limited to orphan
+// documents past the cutoff (supplier_invoice_id IS NULL AND verification_id IS
+// NULL). A skipped document attached to a supplier invoice or a verification is
+// retained räkenskapsinformation, so its cleartext stays on the row until an
+// operator repairs the company's dek_wrapped. That residue is why skipped > 0
+// has to page rather than just log.
+func (s *Store) BackfillDocumentPII(ctx context.Context) (migrated, skipped int, err error) {
 	rows, err := s.q.ListDocumentsForPIIBackfill(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("store: list documents for PII backfill: %w", err)
+		return 0, 0, fmt.Errorf("store: list documents for PII backfill: %w", err)
 	}
+	return backfillDocumentPIIRows(rows,
+		func(companyID uuid.UUID) (*crypto.DEK, error) { return s.companyDEK(ctx, companyID) },
+		func(p gen.SetDocumentPIIEncParams) error { return s.q.SetDocumentPIIEnc(ctx, p) })
+}
+
+// backfillDocumentPIIRows is the loop of BackfillDocumentPII, split from its
+// database wiring so the failure policy documented there is exercised by a unit
+// test that needs no Postgres. The store integration tests skip when
+// PARE_TEST_DATABASE_URL is unset, which is exactly the case in the ci-go
+// pipeline, so a DB-only test for this would never actually run.
+func backfillDocumentPIIRows(
+	rows []gen.ListDocumentsForPIIBackfillRow,
+	dekFor func(uuid.UUID) (*crypto.DEK, error),
+	write func(gen.SetDocumentPIIEncParams) error,
+) (migrated, skipped int, err error) {
 	deks := map[uuid.UUID]*crypto.DEK{}
-	migrated := 0
+	unusable := map[uuid.UUID]bool{}
 	for _, r := range rows {
+		// Checked before the cache so a broken company costs one dekFor call and
+		// one log line, not one per row.
+		if unusable[r.CompanyID] {
+			skipped++
+			continue
+		}
 		dek, ok := deks[r.CompanyID]
 		if !ok {
-			dek, err = s.companyDEK(ctx, r.CompanyID)
-			if err != nil {
-				return migrated, fmt.Errorf("store: dek for company %s: %w", r.CompanyID, err)
+			d, derr := dekFor(r.CompanyID)
+			if derr != nil {
+				if !errors.Is(derr, ErrDEKUnusable) {
+					return migrated, skipped, fmt.Errorf("store: dek for company %s: %w", r.CompanyID, derr)
+				}
+				unusable[r.CompanyID] = true
+				skipped++
+				slog.Error("backfill document pii: company DEK unusable, documents left in cleartext",
+					"company", r.CompanyID, "err", derr)
+				continue
 			}
+			dek = d
 			deks[r.CompanyID] = dek
 		}
-		filenameEnc, err := encField(dek, r.Filename)
-		if err != nil {
-			return migrated, err
+		filenameEnc, ferr := encField(dek, r.Filename)
+		if ferr != nil {
+			return migrated, skipped, fmt.Errorf("store: encrypt filename for document %s: %w", r.ID, ferr)
 		}
-		noteEnc, err := encField(dek, r.Note)
-		if err != nil {
-			return migrated, err
+		noteEnc, nerr := encField(dek, r.Note)
+		if nerr != nil {
+			return migrated, skipped, fmt.Errorf("store: encrypt note for document %s: %w", r.ID, nerr)
 		}
-		if err := s.q.SetDocumentPIIEnc(ctx, gen.SetDocumentPIIEncParams{
-			ID: r.ID, FilenameEnc: filenameEnc, NoteEnc: noteEnc,
-		}); err != nil {
-			return migrated, fmt.Errorf("store: set document PII enc %s: %w", r.ID, err)
+		if werr := write(gen.SetDocumentPIIEncParams{ID: r.ID, FilenameEnc: filenameEnc, NoteEnc: noteEnc}); werr != nil {
+			return migrated, skipped, fmt.Errorf("store: set document PII enc %s: %w", r.ID, werr)
 		}
 		migrated++
 	}
-	return migrated, nil
+	return migrated, skipped, nil
 }
 
 // AnonymizeNonRetainedPII blanks the PII of records that are NOT räkenskaps-
 // information for one company and are older than cutoff: never-booked bank lines
-// (text_enc) and orphan documents (filename_enc/note_enc). Booked/attached
-// records are retained untouched. Audited when anything changed. Returns the
-// number of bank lines and documents anonymized.
+// (text_enc) and orphan documents (filename_enc/note_enc plus the legacy
+// cleartext filename/note). Booked/attached records are retained untouched.
+// Audited when anything changed. Returns the number of bank lines and documents
+// anonymized.
+//
+// The document leg is pure SQL and needs no DEK, so it is the one path that can
+// still erase an orphan document belonging to a company BackfillDocumentPII had
+// to skip. It does not cover attached documents: those are retained
+// verifikationsunderlag, and a skipped one keeps its cleartext until the
+// company's dek_wrapped is repaired. See BackfillDocumentPII.
 func (s *Store) AnonymizeNonRetainedPII(ctx context.Context, companyID uuid.UUID, cutoff time.Time) (bankLines, docs int64, err error) {
 	cut := pgtype.Timestamptz{Time: cutoff, Valid: true}
 	bankLines, err = s.q.AnonymizeNonRetainedBankTxns(ctx, gen.AnonymizeNonRetainedBankTxnsParams{CompanyID: companyID, CreatedAt: cut})

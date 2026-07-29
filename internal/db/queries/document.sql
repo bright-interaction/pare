@@ -40,6 +40,19 @@ UPDATE documents SET filename_enc = $2, note_enc = $3, filename = '', note = '' 
 -- and are older than the cutoff. Such an orphan receipt is not räkenskaps-
 -- information, so its identifying filename/note need not be retained. Rows are
 -- kept for referential integrity.
-UPDATE documents SET filename_enc = '', note_enc = ''
+--
+-- The legacy cleartext columns are blanked too, and the predicate fires on them
+-- (audit 2026-07-28 HIGH-2). BackfillDocumentPII skips a company whose DEK is
+-- unusable instead of aborting boot, so a pre-00025 row can still be sitting
+-- here with cleartext filename/note and an empty filename_enc. Without the two
+-- non-empty-cleartext legs added to the predicate below, that row would never
+-- match and its cleartext PII would outlive the retention window forever. The
+-- statement needs no DEK, so it heals exactly the rows the backfill could not
+-- touch. It is a no-op on healthy rows: InsertDocument stopped writing the
+-- cleartext columns in migration 00025 and SetDocumentPIIEnc blanks them in the
+-- same UPDATE that populates the _enc columns. The retention guard is
+-- unchanged: an attached document is still never touched.
+UPDATE documents SET filename_enc = '', note_enc = '', filename = '', note = ''
 WHERE company_id = $1 AND supplier_invoice_id IS NULL AND verification_id IS NULL
-  AND (filename_enc <> '' OR note_enc <> '') AND created_at < $2;
+  AND (filename_enc <> '' OR note_enc <> '' OR filename <> '' OR note <> '')
+  AND created_at < $2;

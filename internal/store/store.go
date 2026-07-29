@@ -109,16 +109,39 @@ func (s *Store) SyncChart(ctx context.Context) error {
 	return nil
 }
 
+// ErrDEKUnusable marks a company whose data-encryption key cannot be recovered
+// from the dek_wrapped stored on its row: the wrapped ciphertext is corrupt, or
+// the current PARE_MASTER_KEY is not the one it was wrapped under. That is a
+// per-company data condition no retry fixes, so a maintenance job that iterates
+// rows across companies may skip the affected company and keep going. Every
+// other error companyDEK can return (a failed GetCompany) is an infrastructure
+// fault and must stay fatal to its caller. Only BackfillDocumentPII branches on
+// this today; the request-path callers still surface any DEK error as an error.
+var ErrDEKUnusable = errors.New("store: company DEK unusable")
+
 func (s *Store) companyDEK(ctx context.Context, companyID uuid.UUID) (*crypto.DEK, error) {
 	co, err := s.q.GetCompany(ctx, companyID)
 	if err != nil {
+		// Pool exhaustion, statement timeout, missing row: infrastructure or a
+		// caller bug, deliberately NOT wrapped in ErrDEKUnusable.
 		return nil, fmt.Errorf("store: get company: %w", err)
 	}
-	raw, err := s.kek.UnwrapDEK(co.DekWrapped)
+	return s.dekFromWrapped(co.DekWrapped)
+}
+
+// dekFromWrapped unwraps a stored dek_wrapped under the current KEK. Both
+// failure modes here are properties of the stored bytes rather than of the
+// infrastructure, so both are wrapped in ErrDEKUnusable.
+func (s *Store) dekFromWrapped(wrapped string) (*crypto.DEK, error) {
+	raw, err := s.kek.UnwrapDEK(wrapped)
 	if err != nil {
-		return nil, fmt.Errorf("store: unwrap dek: %w", err)
+		return nil, fmt.Errorf("%w: unwrap dek: %w", ErrDEKUnusable, err)
 	}
-	return crypto.NewDEKFrom(raw)
+	dek, err := crypto.NewDEKFrom(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrDEKUnusable, err)
+	}
+	return dek, nil
 }
 
 // PostVerification validates and writes a balanced verification and its lines in
