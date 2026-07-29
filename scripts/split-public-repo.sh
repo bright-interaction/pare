@@ -29,6 +29,15 @@ SPLIT_BRANCH="pare-public-split"
 # public self-hosters use deploy/docker-compose.yml instead, which is generic.
 STRIP_PATHS=(
   docker-compose.yml
+  # Internal audit reports. filter-repo --invert-paths strips these from ALL
+  # history, which is the point: moving a report out of pare/ on main does NOT
+  # remove it from the mirror, because git subtree split preserves the commit
+  # that added it. Only a strip entry does. AUDIT-2026-07-28.md documents four
+  # findings still open on a live product; publishing it hands out a map.
+  # Every new audit filename must be added here, same as hash does with
+  # SECURITY-COMPLIANCE-AUDIT-2026-07-07.md. filter-repo --path takes exact
+  # paths, not globs, so there is no pattern that covers this automatically.
+  AUDIT-2026-07-28.md
 )
 
 for arg in "$@"; do
